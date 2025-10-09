@@ -49,7 +49,6 @@ async fn test_save_and_get_cursor(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "src/postgres/migrations")]
 async fn test_get_nonexistent_cursor(pool: sqlx::PgPool) {
     let repository = PostgresCursorRepository::new(pool.clone()).await.unwrap();
-
     let result = repository.get_cursor("nonexistent_id").await.unwrap();
     assert!(result.is_none());
 }
@@ -138,7 +137,6 @@ async fn test_special_characters_in_id_and_cursor(pool: sqlx::PgPool) {
 async fn test_repository_creation(pool: sqlx::PgPool) {
     // Test that repository can be created successfully
     let repository = PostgresCursorRepository::new(pool.clone()).await.unwrap();
-
     // Verify it's usable by doing a simple operation
     let result = repository.get_cursor("test_creation").await.unwrap();
     assert!(result.is_none());
