@@ -11,6 +11,7 @@ use crate::models::{
         DataType, PropertyItem, DATA_TYPE_BOOLEAN, DATA_TYPE_NUMBER, DATA_TYPE_POINT,
         DATA_TYPE_RELATION, DATA_TYPE_STRING, DATA_TYPE_TIME,
     },
+    proposals::{ProposalItem, ProposalType, ProposalStatus},
     relations::{SetRelationItem, UnsetRelationItem, UpdateRelationItem},
     spaces::{SpaceItem, SpaceType},
     subspaces::SubspaceItem,
@@ -902,6 +903,108 @@ impl StorageBackend for PostgresStorage {
             &subspace_ids,
             &parent_space_ids
         )
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn insert_proposals(
+        &self,
+        proposals: &Vec<ProposalItem>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ) -> Result<(), StorageError> {
+        if proposals.is_empty() {
+            return Ok(());
+        }
+
+        let mut ids = Vec::with_capacity(proposals.len());
+        let mut space_ids = Vec::with_capacity(proposals.len());
+        let mut proposal_types = Vec::with_capacity(proposals.len());
+        let mut creators = Vec::with_capacity(proposals.len());
+        let mut start_times = Vec::with_capacity(proposals.len());
+        let mut end_times = Vec::with_capacity(proposals.len());
+        let mut statuses = Vec::with_capacity(proposals.len());
+        let mut content_uris = Vec::with_capacity(proposals.len());
+        let mut addresses = Vec::with_capacity(proposals.len());
+        let mut created_at_blocks = Vec::with_capacity(proposals.len());
+
+        for proposal in proposals {
+            ids.push(&proposal.id);
+            space_ids.push(&proposal.space_id);
+            proposal_types.push(match proposal.proposal_type {
+                ProposalType::PublishEdit => "publish_edit",
+                ProposalType::AddMember => "add_member",
+                ProposalType::RemoveMember => "remove_member",
+                ProposalType::AddEditor => "add_editor",
+                ProposalType::RemoveEditor => "remove_editor",
+                ProposalType::AddSubspace => "add_subspace",
+                ProposalType::RemoveSubspace => "remove_subspace",
+            });
+            creators.push(&proposal.creator);
+            start_times.push(&proposal.start_time);
+            end_times.push(&proposal.end_time);
+            statuses.push(match proposal.status {
+                ProposalStatus::Created => "created",
+                ProposalStatus::Executed => "executed",
+                ProposalStatus::Failed => "failed",
+                ProposalStatus::Expired => "expired",
+            });
+            content_uris.push(proposal.content_uri.as_ref());
+            addresses.push(proposal.address.as_ref());
+            created_at_blocks.push(&proposal.created_at_block);
+        }
+
+        let query = r#"
+            INSERT INTO proposals (
+                id, space_id, proposal_type, creator, start_time, end_time, 
+                status, content_uri, address, created_at_block
+            )
+            SELECT id, space_id, proposal_type::"proposalTypes", creator, start_time, end_time,
+                   status::"proposalStatus", content_uri, address, created_at_block
+            FROM UNNEST(
+                $1::uuid[], $2::uuid[], $3::text[], $4::varchar[], $5::bigint[], $6::bigint[],
+                $7::text[], $8::text[], $9::varchar[], $10::bigint[]
+            ) AS t(id, space_id, proposal_type, creator, start_time, end_time, status, content_uri, address, created_at_block)
+            ON CONFLICT (id) DO NOTHING
+        "#;
+
+        sqlx::query(query)
+            .bind(&ids)
+            .bind(&space_ids)
+            .bind(&proposal_types)
+            .bind(&creators)
+            .bind(&start_times)
+            .bind(&end_times)
+            .bind(&statuses)
+            .bind(&content_uris)
+            .bind(&addresses)
+            .bind(&created_at_blocks)
+            .execute(&mut **tx)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn update_proposal_status(
+        &self,
+        proposal_ids: &Vec<Uuid>,
+        status: &str,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ) -> Result<(), StorageError> {
+        if proposal_ids.is_empty() {
+            return Ok(());
+        }
+
+        sqlx::query(
+            r#"
+            UPDATE proposals 
+            SET status = $2::"proposalStatus"
+            WHERE id = ANY($1)
+            "#
+        )
+        .bind(proposal_ids)
+        .bind(status)
         .execute(&mut **tx)
         .await?;
 

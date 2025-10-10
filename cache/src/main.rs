@@ -6,7 +6,7 @@ use std::{env, io::Error};
 use stream::utils::BlockMetadata;
 use thiserror::Error;
 use tokio::task;
-use wire::pb::chain::{EditPublished, GeoOutput};
+use wire::pb::chain::{EditPublished, GeoOutput, PublishEditProposalCreated};
 
 use dotenv::dotenv;
 use prost::Message;
@@ -22,6 +22,40 @@ use cache::{Cache, CacheItem};
 use ipfs::IpfsClient;
 
 type CacheIndexerError = Error;
+
+trait CacheableEvent {
+    fn content_uri(&self) -> &str;
+    fn dao_address(&self) -> &str;
+    fn event_description(&self) -> String;
+}
+
+impl CacheableEvent for EditPublished {
+    fn content_uri(&self) -> &str {
+        &self.content_uri
+    }
+    
+    fn dao_address(&self) -> &str {
+        &self.dao_address
+    }
+    
+    fn event_description(&self) -> String {
+        format!("published edit {}", self.content_uri)
+    }
+}
+
+impl CacheableEvent for PublishEditProposalCreated {
+    fn content_uri(&self) -> &str {
+        &self.content_uri
+    }
+    
+    fn dao_address(&self) -> &str {
+        &self.dao_address
+    }
+    
+    fn event_description(&self) -> String {
+        format!("proposal {} with uri {}", self.proposal_id, self.content_uri)
+    }
+}
 
 pub struct EventData {
     pub block: BlockMetadata,
@@ -99,13 +133,12 @@ impl Sink<EventData> for CacheIndexer {
         let drift_str = stream::utils::format_drift(&block_metadata);
 
         println!(
-            "Processing Block #{} [{}] - Payload {} ({} bytes) - Drift {} – Edits Published {}",
+            "block_number={} block_time=\"{}\" drift=\"{}\" edits_published_count={} proposal_edits_count={} Processing block data",
             block_metadata.block_number,
             block_datetime.format("%Y-%m-%d %H:%M:%S"),
-            output.type_url.replace("type.googleapis.com/", ""),
-            output.value.len(),
             drift_str,
-            geo.edits_published.len()
+            geo.edits_published.len(),
+            geo.edits.len()
         );
 
         for edit in geo.edits_published {
@@ -121,14 +154,40 @@ impl Sink<EventData> for CacheIndexer {
             let ipfs = self.ipfs.clone();
 
             println!(
-                "Processing cache entry for uri {} in block {}",
-                edit.content_uri, block_metadata.block_number
+                "block_number={} content_uri=\"{}\" Processing cache entry for published edit",
+                block_metadata.block_number, edit.content_uri
             );
 
             let block_metadata = stream::utils::block_metadata(block_data);
 
             task::spawn(async move {
-                process_edit_event(edit, &cache, &ipfs, &block_metadata).await?;
+                process_edit_event(&edit, &cache, &ipfs, &block_metadata).await?;
+                drop(permit);
+                Ok::<(), IndexerError>(())
+            });
+        }
+
+        for edit in geo.edits {
+            if get_blocklist()
+                .dao_addresses
+                .contains(&edit.dao_address.as_str())
+            {
+                continue;
+            }
+
+            let permit = self.semaphore.clone().acquire_owned().await.unwrap();
+            let cache = self.cache.clone();
+            let ipfs = self.ipfs.clone();
+
+            println!(
+                "block_number={} proposal_id=\"{}\" content_uri=\"{}\" Processing cache entry for proposal edit",
+                block_metadata.block_number, edit.proposal_id, edit.content_uri
+            );
+
+            let block_metadata = stream::utils::block_metadata(block_data);
+
+            task::spawn(async move {
+                process_edit_event(&edit, &cache, &ipfs, &block_metadata).await?;
                 drop(permit);
                 Ok::<(), IndexerError>(())
             });
@@ -138,8 +197,8 @@ impl Sink<EventData> for CacheIndexer {
     }
 }
 
-async fn process_edit_event(
-    edit: EditPublished,
+async fn process_edit_event<T: CacheableEvent>(
+    edit: &T,
     cache: &Arc<Mutex<Cache>>,
     ipfs: &Arc<IpfsClient>,
     block: &BlockMetadata,
@@ -147,20 +206,20 @@ async fn process_edit_event(
     {
         let mut cache_instance = cache.lock().await;
 
-        if cache_instance.has(&edit.content_uri).await? {
+        if cache_instance.has(&edit.content_uri().to_string()).await? {
             return Ok(());
         }
     }
 
-    let data = ipfs.get(&edit.content_uri).await;
+    let data = ipfs.get(edit.content_uri()).await;
 
     match data {
         Ok(result) => {
             let item = CacheItem {
-                uri: edit.content_uri.clone(),
+                uri: edit.content_uri().to_string(),
                 block: block.timestamp.clone(),
                 json: Some(result),
-                space: derive_space_id(GEO, &edit.dao_address),
+                space: derive_space_id(GEO, edit.dao_address()),
                 is_errored: false,
             };
 
@@ -170,20 +229,30 @@ async fn process_edit_event(
             match res {
                 Ok(_) => {
                     println!(
-                        "Successfully wrote cid to cache {} for block {}",
-                        edit.content_uri.clone(),
+                        "block_number={} content_uri=\"{}\" Successfully wrote to cache for {}",
                         block.block_number,
+                        edit.content_uri(),
+                        edit.event_description(),
                     );
                 }
                 Err(err) => {
-                    println!("Err {:?}", err)
+                    println!(
+                        "block_number={} content_uri=\"{}\" error=\"{:?}\" Failed to write to cache for {}",
+                        block.block_number,
+                        edit.content_uri(),
+                        err,
+                        edit.event_description(),
+                    );
                 }
             }
         }
         Err(error) => {
             println!(
-                "Error writing decoded edit event to cache for uri {} in block {} {}",
-                edit.content_uri, block.block_number, error
+                "block_number={} content_uri=\"{}\" error=\"{}\" Error writing decoded edit event to cache for {}",
+                block.block_number,
+                edit.content_uri(),
+                error,
+                edit.event_description(),
             );
 
             // We may receive events where the format of the ipfs contents is
@@ -192,10 +261,10 @@ async fn process_edit_event(
             // the decoded state, or be notified that the event exists, but the
             // contents are invalid.
             let item = CacheItem {
-                uri: edit.content_uri,
+                uri: edit.content_uri().to_string(),
                 block: block.timestamp.clone(),
                 json: None,
-                space: derive_space_id(GEO, &edit.dao_address),
+                space: derive_space_id(GEO, edit.dao_address()),
                 is_errored: true,
             };
 
@@ -228,7 +297,7 @@ async fn main() -> Result<(), Error> {
                 .await;
         }
         Err(err) => {
-            println!("Error initializing stream {}", err);
+            println!("error=\"{}\" Error initializing cache storage", err);
         }
     }
 

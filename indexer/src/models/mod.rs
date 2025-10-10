@@ -1,6 +1,7 @@
 pub mod entities;
 pub mod membership;
 pub mod properties;
+pub mod proposals;
 pub mod relations;
 pub mod spaces;
 pub mod subspaces;

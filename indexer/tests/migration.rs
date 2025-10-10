@@ -8,7 +8,7 @@ use wire::pb::grc20::Edit;
 use dotenv::dotenv;
 use indexer::{
     block_handler::root_handler,
-    cache::{properties_cache::PropertiesCache, PreprocessedEdit},
+    cache::properties_cache::PropertiesCache,
     error::IndexingError,
     storage::postgres::PostgresStorage,
     CreatedSpace, KgData, PersonalSpace, PublicSpace,
@@ -153,6 +153,8 @@ async fn main() -> Result<(), IndexingError> {
                 removed_members: vec![],
                 added_subspaces: vec![],
                 removed_subspaces: vec![],
+                executed_proposals: vec![],
+                created_proposals: vec![],
             },
             KgData {
                 block: block_2,
@@ -168,6 +170,8 @@ async fn main() -> Result<(), IndexingError> {
                 removed_members: vec![],
                 added_subspaces: vec![],
                 removed_subspaces: vec![],
+                executed_proposals: vec![],
+                created_proposals: vec![],
             },
         ])
         .await?;

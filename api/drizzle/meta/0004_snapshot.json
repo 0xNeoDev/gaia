@@ -1,6 +1,6 @@
 {
-  "id": "47c6c1d4-e8a2-407c-86a3-ee58bee8f02f",
-  "prevId": "d577625c-cfed-4bf4-b7d1-a182e8e9a1ff",
+  "id": "39765446-73cc-42dd-8594-8db5348bba9c",
+  "prevId": "2fcde86a-27a9-4615-a105-e4023d1e5392",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -33,24 +33,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "editors_space_id_spaces_id_fk": {
           "name": "editors_space_id_spaces_id_fk",
           "tableFrom": "editors",
+          "tableTo": "spaces",
           "columnsFrom": [
             "space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -114,9 +114,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "entities_updated_at_id_idx": {
           "name": "entities_updated_at_id_idx",
@@ -135,9 +135,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -195,10 +195,10 @@
       "uniqueConstraints": {
         "ipfs_cache_uri_unique": {
           "name": "ipfs_cache_uri_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "uri"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -234,24 +234,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "members_space_id_spaces_id_fk": {
           "name": "members_space_id_spaces_id_fk",
           "tableFrom": "members",
+          "tableTo": "spaces",
           "columnsFrom": [
             "space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -329,12 +329,250 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.proposals": {
+      "name": "proposals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proposal_type": {
+          "name": "proposal_type",
+          "type": "proposalTypes",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creator": {
+          "name": "creator",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_time": {
+          "name": "end_time",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "proposalStatus",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'created'"
+        },
+        "content_uri": {
+          "name": "content_uri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "address": {
+          "name": "address",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at_block": {
+          "name": "created_at_block",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "proposals_space_id_idx": {
+          "name": "proposals_space_id_idx",
+          "columns": [
+            {
+              "expression": "space_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_creator_idx": {
+          "name": "proposals_creator_idx",
+          "columns": [
+            {
+              "expression": "creator",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_status_idx": {
+          "name": "proposals_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_type_idx": {
+          "name": "proposals_type_idx",
+          "columns": [
+            {
+              "expression": "proposal_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_address_idx": {
+          "name": "proposals_address_idx",
+          "columns": [
+            {
+              "expression": "address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_start_time_idx": {
+          "name": "proposals_start_time_idx",
+          "columns": [
+            {
+              "expression": "start_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_end_time_idx": {
+          "name": "proposals_end_time_idx",
+          "columns": [
+            {
+              "expression": "end_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_space_status_idx": {
+          "name": "proposals_space_status_idx",
+          "columns": [
+            {
+              "expression": "space_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "proposals_space_type_idx": {
+          "name": "proposals_space_type_idx",
+          "columns": [
+            {
+              "expression": "space_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "proposal_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "proposals_space_id_spaces_id_fk": {
+          "name": "proposals_space_id_spaces_id_fk",
+          "tableFrom": "proposals",
+          "tableTo": "spaces",
+          "columnsFrom": [
+            "space_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -383,7 +621,7 @@
         },
         "space_pov": {
           "name": "space_pov",
-          "type": "varchar(42)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -509,9 +747,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_type_id_idx": {
           "name": "relations_type_id_idx",
@@ -524,9 +762,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_from_entity_id_idx": {
           "name": "relations_from_entity_id_idx",
@@ -539,9 +777,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_to_entity_id_idx": {
           "name": "relations_to_entity_id_idx",
@@ -554,9 +792,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_space_id_idx": {
           "name": "relations_space_id_idx",
@@ -569,9 +807,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_space_from_to_idx": {
           "name": "relations_space_from_to_idx",
@@ -596,9 +834,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_space_type_idx": {
           "name": "relations_space_type_idx",
@@ -617,9 +855,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_to_entity_space_idx": {
           "name": "relations_to_entity_space_idx",
@@ -638,9 +876,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_from_entity_space_idx": {
           "name": "relations_from_entity_space_idx",
@@ -659,9 +897,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_entity_type_space_idx": {
           "name": "relations_entity_type_space_idx",
@@ -686,9 +924,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "relations_type_from_to_idx": {
           "name": "relations_type_from_to_idx",
@@ -713,102 +951,102 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "relations_entity_id_entities_id_fk": {
           "name": "relations_entity_id_entities_id_fk",
           "tableFrom": "relations",
+          "tableTo": "entities",
           "columnsFrom": [
             "entity_id"
           ],
-          "tableTo": "entities",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "relations_type_id_properties_id_fk": {
           "name": "relations_type_id_properties_id_fk",
           "tableFrom": "relations",
+          "tableTo": "properties",
           "columnsFrom": [
             "type_id"
           ],
-          "tableTo": "properties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "relations_from_entity_id_entities_id_fk": {
           "name": "relations_from_entity_id_entities_id_fk",
           "tableFrom": "relations",
+          "tableTo": "entities",
           "columnsFrom": [
             "from_entity_id"
           ],
-          "tableTo": "entities",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "relations_from_space_id_spaces_id_fk": {
           "name": "relations_from_space_id_spaces_id_fk",
           "tableFrom": "relations",
+          "tableTo": "spaces",
           "columnsFrom": [
             "from_space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "relations_to_entity_id_entities_id_fk": {
           "name": "relations_to_entity_id_entities_id_fk",
           "tableFrom": "relations",
+          "tableTo": "entities",
           "columnsFrom": [
             "to_entity_id"
           ],
-          "tableTo": "entities",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "relations_to_space_id_spaces_id_fk": {
           "name": "relations_to_space_id_spaces_id_fk",
           "tableFrom": "relations",
+          "tableTo": "spaces",
           "columnsFrom": [
             "to_space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "relations_space_id_spaces_id_fk": {
           "name": "relations_space_id_spaces_id_fk",
           "tableFrom": "relations",
+          "tableTo": "spaces",
           "columnsFrom": [
             "space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -902,9 +1140,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "subspaces_child_space_id_idx": {
           "name": "subspaces_child_space_id_idx",
@@ -917,37 +1155,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "subspaces_parent_space_id_spaces_id_fk": {
           "name": "subspaces_parent_space_id_spaces_id_fk",
           "tableFrom": "subspaces",
+          "tableTo": "spaces",
           "columnsFrom": [
             "parent_space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "subspaces_child_space_id_spaces_id_fk": {
           "name": "subspaces_child_space_id_spaces_id_fk",
           "tableFrom": "subspaces",
+          "tableTo": "spaces",
           "columnsFrom": [
             "child_space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -988,7 +1226,7 @@
         },
         "space_id": {
           "name": "space_id",
-          "type": "varchar(42)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1029,9 +1267,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1039,12 +1277,12 @@
       "uniqueConstraints": {
         "user_votes_user_entity_space_unique": {
           "name": "user_votes_user_entity_space_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "user_id",
             "entity_id",
             "space_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1134,9 +1372,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_entity_id_idx": {
           "name": "values_entity_id_idx",
@@ -1149,9 +1387,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_space_id_idx": {
           "name": "values_space_id_idx",
@@ -1164,9 +1402,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_text_idx": {
           "name": "values_text_idx",
@@ -1179,9 +1417,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_number_idx": {
           "name": "values_number_idx",
@@ -1194,9 +1432,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_point_idx": {
           "name": "values_point_idx",
@@ -1209,9 +1447,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_boolean_idx": {
           "name": "values_boolean_idx",
@@ -1224,9 +1462,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_time_idx": {
           "name": "values_time_idx",
@@ -1239,9 +1477,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_entity_property_idx": {
           "name": "values_entity_property_idx",
@@ -1260,9 +1498,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_entity_space_idx": {
           "name": "values_entity_space_idx",
@@ -1281,9 +1519,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_property_space_idx": {
           "name": "values_property_space_idx",
@@ -1302,9 +1540,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_entity_property_space_idx": {
           "name": "values_entity_property_space_idx",
@@ -1329,9 +1567,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_space_text_idx": {
           "name": "values_space_text_idx",
@@ -1350,9 +1588,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_language_idx": {
           "name": "values_language_idx",
@@ -1365,9 +1603,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "values_unit_idx": {
           "name": "values_unit_idx",
@@ -1380,50 +1618,50 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "values_property_id_properties_id_fk": {
           "name": "values_property_id_properties_id_fk",
           "tableFrom": "values",
+          "tableTo": "properties",
           "columnsFrom": [
             "property_id"
           ],
-          "tableTo": "properties",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "values_entity_id_entities_id_fk": {
           "name": "values_entity_id_entities_id_fk",
           "tableFrom": "values",
+          "tableTo": "entities",
           "columnsFrom": [
             "entity_id"
           ],
-          "tableTo": "entities",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "values_space_id_spaces_id_fk": {
           "name": "values_space_id_spaces_id_fk",
           "tableFrom": "values",
+          "tableTo": "spaces",
           "columnsFrom": [
             "space_id"
           ],
-          "tableTo": "spaces",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1450,7 +1688,7 @@
         },
         "space_id": {
           "name": "space_id",
-          "type": "varchar(42)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1481,9 +1719,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "idx_votes_count_entity_space": {
           "name": "idx_votes_count_entity_space",
@@ -1502,9 +1740,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1512,11 +1750,11 @@
       "uniqueConstraints": {
         "votes_count_entity_space_unique": {
           "name": "votes_count_entity_space_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "entity_id",
             "space_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1537,6 +1775,29 @@
         "Relation"
       ]
     },
+    "public.proposalStatus": {
+      "name": "proposalStatus",
+      "schema": "public",
+      "values": [
+        "created",
+        "executed",
+        "failed",
+        "expired"
+      ]
+    },
+    "public.proposalTypes": {
+      "name": "proposalTypes",
+      "schema": "public",
+      "values": [
+        "publish_edit",
+        "add_member",
+        "remove_member",
+        "add_editor",
+        "remove_editor",
+        "add_subspace",
+        "remove_subspace"
+      ]
+    },
     "public.spaceTypes": {
       "name": "spaceTypes",
       "schema": "public",
@@ -1547,10 +1808,10 @@
     }
   },
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

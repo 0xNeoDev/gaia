@@ -1,6 +1,6 @@
 {
-  "id": "d577625c-cfed-4bf4-b7d1-a182e8e9a1ff",
-  "prevId": "33beecee-d1e0-4976-b6c7-a59d4fc5add4",
+  "id": "2fcde86a-27a9-4615-a105-e4023d1e5392",
+  "prevId": "18f91369-746e-4084-b908-59af7b1d8f23",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -341,6 +341,163 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.proposals": {
+      "name": "proposals",
+      "schema": "",
+      "columns": {
+        "proposal_id": {
+          "name": "proposal_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "pluginAddress": {
+          "name": "pluginAddress",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creator": {
+          "name": "creator",
+          "type": "varchar(42)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_time": {
+          "name": "end_time",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dao_address": {
+          "name": "dao_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "space_id": {
+          "name": "space_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "proposals_space_id_idx": {
+          "name": "proposals_space_id_idx",
+          "columns": [
+            {
+              "expression": "space_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "proposals_creator_idx": {
+          "name": "proposals_creator_idx",
+          "columns": [
+            {
+              "expression": "creator",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "proposals_start_time_idx": {
+          "name": "proposals_start_time_idx",
+          "columns": [
+            {
+              "expression": "start_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "proposals_end_time_idx": {
+          "name": "proposals_end_time_idx",
+          "columns": [
+            {
+              "expression": "end_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        },
+        "proposals_space_time_idx": {
+          "name": "proposals_space_time_idx",
+          "columns": [
+            {
+              "expression": "space_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "start_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "end_time",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "proposals_space_id_spaces_id_fk": {
+          "name": "proposals_space_id_spaces_id_fk",
+          "tableFrom": "proposals",
+          "columnsFrom": [
+            "space_id"
+          ],
+          "tableTo": "spaces",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.raw_actions": {
       "name": "raw_actions",
       "schema": "",
@@ -383,7 +540,7 @@
         },
         "space_pov": {
           "name": "space_pov",
-          "type": "varchar(42)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -988,7 +1145,7 @@
         },
         "space_id": {
           "name": "space_id",
-          "type": "varchar(42)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -1450,7 +1607,7 @@
         },
         "space_id": {
           "name": "space_id",
-          "type": "varchar(42)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },

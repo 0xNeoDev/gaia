@@ -166,6 +166,69 @@ impl TestStorage {
 
         Ok(())
     }
+
+    /// Test helper: Get proposals by space ID
+    pub async fn get_proposals_by_space(
+        &self,
+        space_id: &Uuid,
+    ) -> Result<Vec<ProposalRow>, IndexingError> {
+        let rows = sqlx::query!(
+            r#"SELECT 
+                id, space_id, proposal_type::text as proposal_type, creator, 
+                start_time, end_time, status::text as status, content_uri, address, created_at_block
+                FROM proposals WHERE space_id = $1 ORDER BY created_at_block"#,
+            space_id
+        )
+        .fetch_all(self.get_pool())
+        .await
+        .map_err(|e| IndexingError::StorageError(StorageError::Database(e)))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| ProposalRow {
+                id: row.id,
+                space_id: row.space_id,
+                proposal_type: row.proposal_type.unwrap_or_default(),
+                creator: row.creator,
+                start_time: row.start_time,
+                end_time: row.end_time,
+                status: row.status.unwrap_or_default(),
+                content_uri: row.content_uri,
+                address: row.address,
+                created_at_block: row.created_at_block,
+            })
+            .collect())
+    }
+
+    /// Test helper: Get proposal by ID
+    pub async fn get_proposal_by_id(
+        &self,
+        proposal_id: &Uuid,
+    ) -> Result<Option<ProposalRow>, IndexingError> {
+        let row = sqlx::query!(
+            r#"SELECT 
+                id, space_id, proposal_type::text as proposal_type, creator, 
+                start_time, end_time, status::text as status, content_uri, address, created_at_block
+                FROM proposals WHERE id = $1"#,
+            proposal_id
+        )
+        .fetch_optional(self.get_pool())
+        .await
+        .map_err(|e| IndexingError::StorageError(StorageError::Database(e)))?;
+
+        Ok(row.map(|r| ProposalRow {
+            id: r.id,
+            space_id: r.space_id,
+            proposal_type: r.proposal_type.unwrap_or_default(),
+            creator: r.creator,
+            start_time: r.start_time,
+            end_time: r.end_time,
+            status: r.status.unwrap_or_default(),
+            content_uri: r.content_uri,
+            address: r.address,
+            created_at_block: r.created_at_block,
+        }))
+    }
 }
 
 /// Test data structures for database row verification
@@ -218,6 +281,20 @@ pub struct RelationRow {
     pub position: Option<String>,
     pub space_id: Uuid,
     pub verified: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProposalRow {
+    pub id: Uuid,
+    pub space_id: Uuid,
+    pub proposal_type: String,
+    pub creator: String,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub status: String,
+    pub content_uri: Option<String>,
+    pub address: Option<String>,
+    pub created_at_block: i64,
 }
 
 impl SpaceRow {

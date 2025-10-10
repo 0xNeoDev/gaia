@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \n                id, space_id, proposal_type::text as proposal_type, creator, \n                start_time, end_time, status::text as status, content_uri, address, created_at_block\n                FROM proposals WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "space_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "proposal_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "creator",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "start_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "end_time",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "content_uri",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "address",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at_block",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      null,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "d73d52cde98c8c6983afb6a11807b502333290fb2dec091290e25b007fc25190"
+}

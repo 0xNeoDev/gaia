@@ -5,7 +5,7 @@ use stream::utils::{self, BlockMetadata};
 use tracing::{info, instrument, Instrument};
 
 use crate::block_handler::{
-    edit_handler, membership_handler, space_handler, subspace_handler, utils::handle_task_result,
+    edit_handler, membership_handler, proposal_handler, space_handler, subspace_handler, utils::handle_task_result,
 };
 use crate::cache::properties_cache::ImmutableCache;
 
@@ -20,7 +20,9 @@ use crate::KgData;
     space_count = output.spaces.len(),
     member_count = output.added_members.len(),
     editor_count = output.added_editors.len(),
-    subspace_count = output.added_subspaces.len()
+    subspace_count = output.added_subspaces.len(),
+    created_proposal_count = output.created_proposals.len(),
+    executed_proposal_count = output.executed_proposals.len()
 ))]
 pub async fn run<S, C>(
     output: &KgData,
@@ -48,6 +50,8 @@ where
         drift = %drift_str,
         edit_count = output.edits.len(),
         space_count = output.spaces.len(),
+        created_proposal_count = output.created_proposals.len(),
+        executed_proposal_count = output.executed_proposals.len(),
         "Processing block"
     );
 
@@ -135,13 +139,39 @@ where
         )
     };
 
-    let (space_result, edit_result, membership_result, subspace_result) =
-        tokio::join!(space_task, edit_task, membership_task, subspace_task);
+    let proposal_task = {
+        let storage = Arc::clone(storage);
+        let block_metadata = block_metadata.clone();
+        let created_proposals = output.created_proposals.clone();
+        let executed_proposals = output.executed_proposals.clone();
+        let block_number = block_metadata.block_number;
+        let proposal_count = created_proposals.len() + executed_proposals.len();
+        
+        tokio::spawn(
+            async move {
+                proposal_handler::run(
+                    &created_proposals,
+                    &executed_proposals,
+                    &block_metadata,
+                    &storage,
+                )
+                .await
+            }
+            .instrument(tracing::info_span!("proposal_task", 
+                block_number = block_number,
+                proposal_count = proposal_count
+            ))
+        )
+    };
+
+    let (space_result, edit_result, membership_result, subspace_result, proposal_result) =
+        tokio::join!(space_task, edit_task, membership_task, subspace_task, proposal_task);
 
     handle_task_result(space_result)?;
     handle_task_result(edit_result)?;
     handle_task_result(membership_result)?;
     handle_task_result(subspace_result)?;
+    handle_task_result(proposal_result)?;
 
     info!(
         block_number = block_metadata.block_number,

@@ -63,6 +63,23 @@ export const meta = pgTable("meta", {
 
 export const spaceTypesEnum = pgEnum("spaceTypes", ["Personal", "Public"]);
 
+export const proposalTypesEnum = pgEnum("proposalTypes", [
+	"publish_edit",
+	"add_member", 
+	"remove_member",
+	"add_editor",
+	"remove_editor", 
+	"add_subspace",
+	"remove_subspace"
+]);
+
+export const proposalStatusEnum = pgEnum("proposalStatus", [
+	"created",
+	"executed", 
+	"failed",
+	"expired"
+]);
+
 export const spaces = pgTable("spaces", {
 	id: uuid().primaryKey(),
 	type: spaceTypesEnum().notNull(),
@@ -273,6 +290,35 @@ export const subspaces = pgTable(
 		index("subspaces_child_space_id_idx").on(table.childSpaceId),
 	],
 );
+
+/**
+ * Governance actions
+ */
+export const proposals = pgTable("proposals",
+  {
+    id: uuid().primaryKey(),
+    spaceId: uuid().notNull().references(() => spaces.id),
+    proposalType: proposalTypesEnum().notNull(),
+    creator: varchar("creator", { length: 42 }).notNull(),
+    startTime: bigint("start_time", { mode: "number" }).notNull(),
+    endTime: bigint("end_time", { mode: "number" }).notNull(),
+    status: proposalStatusEnum().notNull().default("created"),
+    contentUri: text("content_uri"),
+    address: varchar("address", { length: 42 }),
+    createdAtBlock: bigint("created_at_block", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    index("proposals_space_id_idx").on(table.spaceId),
+    index("proposals_creator_idx").on(table.creator),
+    index("proposals_status_idx").on(table.status),
+    index("proposals_type_idx").on(table.proposalType),
+    index("proposals_address_idx").on(table.address),
+    index("proposals_start_time_idx").on(table.startTime),
+    index("proposals_end_time_idx").on(table.endTime),
+    index("proposals_space_status_idx").on(table.spaceId, table.status),
+    index("proposals_space_type_idx").on(table.spaceId, table.proposalType),
+  ]
+)
 
 export const entityForeignValues = drizzleRelations(
 	entities,

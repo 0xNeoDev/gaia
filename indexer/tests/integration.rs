@@ -19,7 +19,7 @@ use indexer::{
     models::properties::DataType,
     storage::{postgres::PostgresStorage, StorageError},
     test_utils::TestStorage,
-    AddedMember, AddedSubspace, CreatedSpace, KgData, PersonalSpace, PublicSpace, RemovedMember,
+    AddedMember, AddedSubspace, CreatedSpace, ExecutedProposal, KgData, PersonalSpace, ProposalCreated, PublicSpace, RemovedMember,
     RemovedSubspace,
 };
 use indexer_utils::{checksum_address, id::derive_space_id, network_ids::GEO};
@@ -50,6 +50,7 @@ impl TestIndexer {
 }
 
 // @TODO: Different test for the cache preprocessing
+
 
 #[tokio::test]
 async fn main() -> Result<(), IndexingError> {
@@ -154,6 +155,8 @@ async fn main() -> Result<(), IndexingError> {
             removed_members: vec![],
             added_subspaces: vec![],
             removed_subspaces: vec![],
+            executed_proposals: vec![],
+            created_proposals: vec![],
         }])
         .await?;
 
@@ -737,6 +740,8 @@ async fn test_property_no_overwrite() -> Result<(), IndexingError> {
             removed_members: vec![],
             added_subspaces: vec![],
             removed_subspaces: vec![],
+            executed_proposals: vec![],
+            created_proposals: vec![],
         }])
         .await?;
 
@@ -765,6 +770,8 @@ async fn test_property_no_overwrite() -> Result<(), IndexingError> {
             removed_members: vec![],
             added_subspaces: vec![],
             removed_subspaces: vec![],
+            executed_proposals: vec![],
+            created_proposals: vec![],
         }])
         .await?;
 
@@ -834,6 +841,8 @@ async fn test_property_squashing() -> Result<(), IndexingError> {
             removed_members: vec![],
             added_subspaces: vec![],
             removed_subspaces: vec![],
+            executed_proposals: vec![],
+            created_proposals: vec![],
         }])
         .await?;
 
@@ -1008,6 +1017,8 @@ fn make_kg_data_with_spaces(
         removed_members: vec![],
         added_subspaces: vec![],
         removed_subspaces: vec![],
+        executed_proposals: vec![],
+        created_proposals: vec![],
     }
 }
 
@@ -1328,6 +1339,8 @@ fn make_kg_data_with_membership(
         removed_editors,
         added_subspaces: vec![],
         removed_subspaces: vec![],
+        executed_proposals: vec![],
+        created_proposals: vec![],
     }
 }
 
@@ -1764,6 +1777,8 @@ fn make_kg_data_with_subspaces(
         removed_editors: vec![],
         added_subspaces,
         removed_subspaces,
+        executed_proposals: vec![],
+        created_proposals: vec![],
     }
 }
 
@@ -1999,6 +2014,8 @@ async fn test_subspace_indexing_with_other_operations() -> Result<(), IndexingEr
         removed_editors: vec![],
         added_subspaces,
         removed_subspaces: vec![],
+        executed_proposals: vec![],
+        created_proposals: vec![],
     };
     let blocks = vec![kg_data];
 
@@ -2104,5 +2121,205 @@ async fn test_properties_cache_initialization_from_database() -> Result<(), Inde
     let result = empty_cache.get(&test_properties[0].0.parse().unwrap()).await;
     assert!(result.is_err(), "Empty cache should return error for any property");
     
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_proposals_indexing() -> Result<(), IndexingError> {
+    dotenv().ok();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set");
+    let storage = Arc::new(PostgresStorage::new(&database_url).await?);
+    let test_storage = TestStorage::new(storage.clone());
+    let properties_cache = Arc::new(PropertiesCache::new());
+    let indexer = TestIndexer::new(storage.clone(), properties_cache.clone());
+
+    // Setup test data
+    let space_dao_address = "0x1234567890123456789012345678901234567890".to_string();
+    let space_id = derive_space_id(GEO, &checksum_address(space_dao_address.clone()));
+    let proposal_id = "550e8400-e29b-41d4-a716-446655440001".to_string();
+    let creator_address = "0xabcdef1234567890abcdef1234567890abcdef12".to_string();
+    let member_address = "0x9876543210987654321098765432109876543210".to_string();
+
+    // Clear test data
+    test_storage.clear_table("proposals").await?;
+    test_storage.clear_table("spaces").await?;
+
+    // Create test space first
+    let test_space = CreatedSpace::Public(PublicSpace {
+        dao_address: space_dao_address.clone(),
+        space_address: "0x1111111111111111111111111111111111111111".to_string(),
+        membership_plugin: "0x2222222222222222222222222222222222222222".to_string(),
+        governance_plugin: "0x3333333333333333333333333333333333333333".to_string(),
+    });
+
+    // Create test proposals
+    let publish_edit_proposal = ProposalCreated::PublishEdit {
+        proposal_id: proposal_id.clone(),
+        creator: creator_address.clone(),
+        start_time: "1234567890".to_string(),
+        end_time: "1234567999".to_string(),
+        content_uri: "ipfs://QmTest123".to_string(),
+        dao_address: space_dao_address.clone(),
+        plugin_address: "0x4444444444444444444444444444444444444444".to_string(),
+        edit_id: None, // No edit_id for this test
+    };
+
+    let add_member_proposal = ProposalCreated::AddMember {
+        proposal_id: "550e8400-e29b-41d4-a716-446655440002".to_string(),
+        creator: creator_address.clone(),
+        start_time: "1234567890".to_string(),
+        end_time: "1234567999".to_string(),
+        member: member_address.clone(),
+        dao_address: space_dao_address.clone(),
+        plugin_address: "0x4444444444444444444444444444444444444444".to_string(),
+        change_type: "add".to_string(),
+    };
+
+    let kg_data = KgData {
+        block: BlockMetadata {
+            cursor: String::from("1"),
+            block_number: 100,
+            timestamp: String::from("1234567890"),
+        },
+        edits: vec![],
+        spaces: vec![test_space],
+        added_editors: vec![],
+        added_members: vec![],
+        removed_editors: vec![],
+        removed_members: vec![],
+        added_subspaces: vec![],
+        removed_subspaces: vec![],
+        executed_proposals: vec![],
+        created_proposals: vec![publish_edit_proposal, add_member_proposal],
+    };
+
+    // Run the indexer
+    indexer.run(&vec![kg_data]).await?;
+
+    // Verify proposals were created
+    let proposals = test_storage.get_proposals_by_space(&space_id).await?;
+    assert_eq!(proposals.len(), 2, "Should have 2 proposals");
+
+    // Check publish edit proposal
+    let publish_proposal = proposals.iter()
+        .find(|p| p.id.to_string() == proposal_id)
+        .expect("Publish edit proposal should exist");
+    assert_eq!(publish_proposal.proposal_type, "publish_edit");
+    assert_eq!(publish_proposal.creator, checksum_address(creator_address.clone()));
+    assert_eq!(publish_proposal.status, "created");
+    assert_eq!(publish_proposal.content_uri.as_ref().unwrap(), "ipfs://QmTest123");
+    assert!(publish_proposal.address.is_none());
+
+    // Check add member proposal
+    let member_proposal = proposals.iter()
+        .find(|p| p.id.to_string() == "550e8400-e29b-41d4-a716-446655440002")
+        .expect("Add member proposal should exist");
+    assert_eq!(member_proposal.proposal_type, "add_member");
+    assert_eq!(member_proposal.creator, checksum_address(creator_address.clone()));
+    assert_eq!(member_proposal.status, "created");
+    assert!(member_proposal.content_uri.is_none());
+    assert_eq!(member_proposal.address.as_ref().unwrap(), &checksum_address(member_address));
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn test_executed_proposals() -> Result<(), IndexingError> {
+    dotenv().ok();
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set");
+    let storage = Arc::new(PostgresStorage::new(&database_url).await?);
+    let test_storage = TestStorage::new(storage.clone());
+    let properties_cache = Arc::new(PropertiesCache::new());
+    let indexer = TestIndexer::new(storage.clone(), properties_cache.clone());
+
+    // Setup test data
+    let space_dao_address = "0x1234567890123456789012345678901234567890".to_string();
+    let space_id = derive_space_id(GEO, &checksum_address(space_dao_address.clone()));
+    let proposal_id = "550e8400-e29b-41d4-a716-446655440003".to_string();
+
+    // Clear test data
+    test_storage.clear_table("proposals").await?;
+    test_storage.clear_table("spaces").await?;
+
+    // Create test space first
+    let test_space = CreatedSpace::Public(PublicSpace {
+        dao_address: space_dao_address.clone(),
+        space_address: "0x1111111111111111111111111111111111111111".to_string(),
+        membership_plugin: "0x2222222222222222222222222222222222222222".to_string(),
+        governance_plugin: "0x3333333333333333333333333333333333333333".to_string(),
+    });
+
+    // First, create a proposal
+    let created_proposal = ProposalCreated::PublishEdit {
+        proposal_id: proposal_id.clone(),
+        creator: "0xabcdef1234567890abcdef1234567890abcdef12".to_string(),
+        start_time: "1234567890".to_string(),
+        end_time: "1234567999".to_string(),
+        content_uri: "ipfs://QmTest123".to_string(),
+        dao_address: space_dao_address.clone(),
+        plugin_address: "0x4444444444444444444444444444444444444444".to_string(),
+        edit_id: None, // No edit_id for this test
+    };
+
+    let create_kg_data = KgData {
+        block: BlockMetadata {
+            cursor: String::from("1"),
+            block_number: 100,
+            timestamp: String::from("1234567890"),
+        },
+        edits: vec![],
+        spaces: vec![test_space],
+        added_editors: vec![],
+        added_members: vec![],
+        removed_editors: vec![],
+        removed_members: vec![],
+        added_subspaces: vec![],
+        removed_subspaces: vec![],
+        executed_proposals: vec![],
+        created_proposals: vec![created_proposal],
+    };
+
+    // Run the indexer to create the proposal
+    indexer.run(&vec![create_kg_data]).await?;
+
+    // Verify proposal was created with "created" status
+    let proposals = test_storage.get_proposals_by_space(&space_id).await?;
+    assert_eq!(proposals.len(), 1);
+    assert_eq!(proposals[0].status, "created");
+
+    // Now execute the proposal
+    let executed_proposal = ExecutedProposal {
+        proposal_id: proposal_id.clone(),
+        plugin_address: "0x4444444444444444444444444444444444444444".to_string(),
+    };
+
+    let execute_kg_data = KgData {
+        block: BlockMetadata {
+            cursor: String::from("2"),
+            block_number: 101,
+            timestamp: String::from("1234567900"),
+        },
+        edits: vec![],
+        spaces: vec![],
+        added_editors: vec![],
+        added_members: vec![],
+        removed_editors: vec![],
+        removed_members: vec![],
+        added_subspaces: vec![],
+        removed_subspaces: vec![],
+        executed_proposals: vec![executed_proposal],
+        created_proposals: vec![],
+    };
+
+    // Run the indexer to execute the proposal
+    indexer.run(&vec![execute_kg_data]).await?;
+
+    // Verify proposal status was updated to "executed"
+    let proposals = test_storage.get_proposals_by_space(&space_id).await?;
+    assert_eq!(proposals.len(), 1);
+    assert_eq!(proposals[0].status, "executed");
+
     Ok(())
 }

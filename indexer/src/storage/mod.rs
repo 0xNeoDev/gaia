@@ -10,6 +10,7 @@ use crate::models::{
     entities::EntityItem,
     membership::{EditorItem, MemberItem},
     properties::PropertyItem,
+    proposals::ProposalItem,
     relations::{SetRelationItem, UnsetRelationItem, UpdateRelationItem},
     spaces::SpaceItem,
     subspaces::SubspaceItem,
@@ -100,6 +101,17 @@ pub trait StorageBackend: Send + Sync {
     async fn remove_subspaces(
         &self,
         subspaces: &Vec<SubspaceItem>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ) -> Result<(), StorageError>;
+    async fn insert_proposals(
+        &self,
+        proposals: &Vec<ProposalItem>,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ) -> Result<(), StorageError>;
+    async fn update_proposal_status(
+        &self,
+        proposal_ids: &Vec<Uuid>,
+        status: &str,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     ) -> Result<(), StorageError>;
 }
