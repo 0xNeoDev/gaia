@@ -20,9 +20,13 @@ CHAIN_ID="80451" # or 19411 for mainnet
 IPFS_KEY=''
 IPFS_GATEWAY_WRITE=''
 IPFS_GATEWAY_READ=''
+IPFS_ALTERNATIVE_GATEWAY_KEY='' # when using Pinata according to the docs example use JWT (it contains the API secret)
+IPFS_ALTERNATIVE_GATEWAY_WRITE=''
 RPC_ENDPOINT=''
 DEPLOYER_PK=''
 ```
+
+You can run a PostgreSQL container using the `docker compose up` command and then set the `DATABASE_URL` to `postgresql://postgres:postgres@localhost:5432/gaia`.
 
 Then run the following commands from within the `/api` directory:
 
