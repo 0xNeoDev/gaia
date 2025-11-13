@@ -36,6 +36,20 @@
       "when": 1760023075030,
       "tag": "0004_short_wolfsbane",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1763072880412,
+      "tag": "0007_public_scorpion",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1763073630908,
+      "tag": "0008_loving_stingray",
+      "breakpoints": true
     }
   ]
 }
