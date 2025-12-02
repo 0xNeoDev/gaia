@@ -17,6 +17,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@opensearch-project/opensearch": "2.12.0",
     "@aragon/osx-ethers": "^1.4.0",
     "@aragon/sdk-client": "^1.26.0",
     "@aragon/sdk-client-common": "^1.17.0",

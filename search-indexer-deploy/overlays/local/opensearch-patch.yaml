@@ -1,0 +1,54 @@
+# =============================================================================
+# Local/Minikube Resource Overrides
+# =============================================================================
+# Reduces memory requirements for local development on minikube.
+#
+# Memory sizing rule: Container memory should be at least 2x JVM heap
+# OpenSearch needs memory for heap + off-heap (Lucene segments, caches, etc.)
+#
+# Local settings:
+#   - OpenSearch: 1GB heap, 2GB request, 4GB limit
+#   - Dashboards: 256MB request, 512MB limit
+# =============================================================================
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opensearch
+  namespace: search
+spec:
+  template:
+    spec:
+      containers:
+        - name: opensearch
+          env:
+            # JVM heap: 1GB for local development
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms1g -Xmx1g"
+          resources:
+            requests:
+              # Memory should be at least 2x JVM heap (heap + off-heap for Lucene)
+              memory: "2Gi"
+              cpu: "250m"
+            limits:
+              memory: "4Gi"
+              cpu: "1000m"
+---
+# Dashboards resource overrides
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opensearch-dashboards
+  namespace: search
+spec:
+  template:
+    spec:
+      containers:
+        - name: dashboards
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

@@ -1,0 +1,23 @@
+[package]
+name = "search-indexer"
+version = "0.1.0"
+edition = "2021"
+description = "Main binary for the Geo Knowledge Graph search indexer"
+
+[dependencies]
+search-indexer-shared = { path = "../search-indexer-shared" }
+search-indexer-repository = { path = "../search-indexer-repository" }
+search-indexer-pipeline = { path = "../search-indexer-pipeline" }
+
+tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread", "signal"] }
+dotenv = "0.15.0"
+thiserror = "2.0.12"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+axiom-rs = "0.11.2"
+chrono = "0.4.41"
+serde_json = "1.0.140"
+
+[dev-dependencies]
+tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread", "test-util"] }
+
