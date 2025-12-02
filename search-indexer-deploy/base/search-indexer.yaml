@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-indexer
+  namespace: search
+  labels:
+    app: search-indexer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search-indexer
+  template:
+    metadata:
+      labels:
+        app: search-indexer
+    spec:
+      containers:
+        - name: search-indexer
+          image: geo/search-indexer:latest
+          imagePullPolicy: Always
+          env:
+            # OpenSearch connection
+            - name: OPENSEARCH_URL
+              value: "http://opensearch.search.svc.cluster.local:9200"
+            # Kafka connection (assuming Kafka is in kafka namespace)
+            - name: KAFKA_BROKER
+              value: "kafka-broker-0.broker.kafka.svc.cluster.local:29092"
+            - name: KAFKA_GROUP_ID
+              value: "search-indexer"
+            # Logging
+            - name: RUST_LOG
+              value: "search_indexer=info,search_indexer_pipeline=info"
+            # Optional: Axiom for centralized logging
+            - name: AXIOM_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: search-indexer-secrets
+                  key: axiom-token
+                  optional: true
+            - name: AXIOM_DATASET
+              value: "gaia.search-indexer"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          # Health check - indexer logs to stdout, so we check if process is running
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "ps aux | grep search-indexer | grep -v grep"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      restartPolicy: Always
+---
+# Optional: Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: search-indexer-secrets
+  namespace: search
+type: Opaque
+stringData:
+  axiom-token: ""  # Set via kubectl or CI/CD
+
