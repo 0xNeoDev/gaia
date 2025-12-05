@@ -1,21 +1,23 @@
 use chrono::Utc;
 use prost::Message;
+use rand::Rng;
 use rdkafka::config::ClientConfig;
 use rdkafka::message::{Header, OwnedHeaders};
 use rdkafka::producer::{BaseProducer, BaseRecord, Producer};
 use std::env;
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 use uuid::Uuid;
-use rand::Rng;
 
 use hermes_schema::pb::blockchain_metadata::BlockchainMetadata;
 use hermes_schema::pb::knowledge::HermesEdit;
 use hermes_schema::pb::space::{
-    HermesCreateSpace, PersonalSpacePayload, DefaultDaoSpacePayload,
-    HermesSpaceTrustExtension, VerifiedExtension, RelatedExtension, SubtopicExtension
+    DefaultDaoSpacePayload, HermesCreateSpace, HermesSpaceTrustExtension, PersonalSpacePayload,
+    RelatedExtension, SubtopicExtension, VerifiedExtension,
 };
-use wire::pb::grc20::{Op, Entity, Value, Property, DataType, Relation};
+use indexer_utils::id::decode_base58_to_uuid;
+use sdk::core::ids::{DESCRIPTION_ATTRIBUTE, NAME_ATTRIBUTE};
+use wire::pb::grc20::{DataType, Entity, Op, Property, Relation, Value};
 
 fn random_uuid_bytes() -> Vec<u8> {
     Uuid::new_v4().as_bytes().to_vec()
@@ -34,23 +36,30 @@ fn create_sample_space() -> HermesCreateSpace {
         space_id: random_uuid_bytes(),
         topic_id: random_uuid_bytes(),
         payload: if is_personal {
-            Some(hermes_schema::pb::space::hermes_create_space::Payload::PersonalSpace(
-                PersonalSpacePayload {
-                    owner: random_address(),
-                }
-            ))
+            Some(
+                hermes_schema::pb::space::hermes_create_space::Payload::PersonalSpace(
+                    PersonalSpacePayload {
+                        owner: random_address(),
+                    },
+                ),
+            )
         } else {
             let editor_count = rng.gen_range(1..=5);
             let member_count = rng.gen_range(3..=10);
-            Some(hermes_schema::pb::space::hermes_create_space::Payload::DefaultDaoSpace(
-                DefaultDaoSpacePayload {
-                    initial_editors: (0..editor_count).map(|_| random_uuid_bytes()).collect(),
-                    initial_members: (0..member_count).map(|_| random_uuid_bytes()).collect(),
-                }
-            ))
+            Some(
+                hermes_schema::pb::space::hermes_create_space::Payload::DefaultDaoSpace(
+                    DefaultDaoSpacePayload {
+                        initial_editors: (0..editor_count).map(|_| random_uuid_bytes()).collect(),
+                        initial_members: (0..member_count).map(|_| random_uuid_bytes()).collect(),
+                    },
+                ),
+            )
         },
         meta: Some(BlockchainMetadata {
-            created_at: Utc::now().timestamp().try_into().expect("timestamp should be positive"),
+            created_at: Utc::now()
+                .timestamp()
+                .try_into()
+                .expect("timestamp should be positive"),
             created_by: random_address(),
             block_number: rng.gen_range(1000000..9999999),
             cursor: format!("cursor_{}", Uuid::new_v4()),
@@ -65,11 +74,16 @@ fn create_verified_trust_extension(
     let mut rng = rand::thread_rng();
     HermesSpaceTrustExtension {
         source_space_id,
-        extension: Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Verified(
-            VerifiedExtension { target_space_id }
-        )),
+        extension: Some(
+            hermes_schema::pb::space::hermes_space_trust_extension::Extension::Verified(
+                VerifiedExtension { target_space_id },
+            ),
+        ),
         meta: Some(BlockchainMetadata {
-            created_at: Utc::now().timestamp().try_into().expect("timestamp should be positive"),
+            created_at: Utc::now()
+                .timestamp()
+                .try_into()
+                .expect("timestamp should be positive"),
             created_by: random_address(),
             block_number: rng.gen_range(1000000..9999999),
             cursor: format!("cursor_{}", Uuid::new_v4()),
@@ -84,11 +98,16 @@ fn create_related_trust_extension(
     let mut rng = rand::thread_rng();
     HermesSpaceTrustExtension {
         source_space_id,
-        extension: Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Related(
-            RelatedExtension { target_space_id }
-        )),
+        extension: Some(
+            hermes_schema::pb::space::hermes_space_trust_extension::Extension::Related(
+                RelatedExtension { target_space_id },
+            ),
+        ),
         meta: Some(BlockchainMetadata {
-            created_at: Utc::now().timestamp().try_into().expect("timestamp should be positive"),
+            created_at: Utc::now()
+                .timestamp()
+                .try_into()
+                .expect("timestamp should be positive"),
             created_by: random_address(),
             block_number: rng.gen_range(1000000..9999999),
             cursor: format!("cursor_{}", Uuid::new_v4()),
@@ -103,11 +122,16 @@ fn create_subtopic_trust_extension(
     let mut rng = rand::thread_rng();
     HermesSpaceTrustExtension {
         source_space_id,
-        extension: Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Subtopic(
-            SubtopicExtension { target_topic_id }
-        )),
+        extension: Some(
+            hermes_schema::pb::space::hermes_space_trust_extension::Extension::Subtopic(
+                SubtopicExtension { target_topic_id },
+            ),
+        ),
         meta: Some(BlockchainMetadata {
-            created_at: Utc::now().timestamp().try_into().expect("timestamp should be positive"),
+            created_at: Utc::now()
+                .timestamp()
+                .try_into()
+                .expect("timestamp should be positive"),
             created_by: random_address(),
             block_number: rng.gen_range(1000000..9999999),
             cursor: format!("cursor_{}", Uuid::new_v4()),
@@ -115,17 +139,64 @@ fn create_subtopic_trust_extension(
     }
 }
 
+/// Get the name and description property bytes from base58-encoded attribute IDs.
+/// Returns (name_bytes, description_bytes) or falls back to random UUID bytes on error.
+fn get_name_description_property_bytes() -> (Vec<u8>, Vec<u8>) {
+    let name_property_bytes = decode_base58_to_uuid(NAME_ATTRIBUTE)
+        .ok()
+        .and_then(|uuid_str| Uuid::parse_str(&uuid_str).ok())
+        .map(|uuid| uuid.as_bytes().to_vec())
+        .unwrap_or_else(|| random_uuid_bytes());
+
+    let description_property_bytes = decode_base58_to_uuid(DESCRIPTION_ATTRIBUTE)
+        .ok()
+        .and_then(|uuid_str| Uuid::parse_str(&uuid_str).ok())
+        .map(|uuid| uuid.as_bytes().to_vec())
+        .unwrap_or_else(|| random_uuid_bytes());
+
+    (name_property_bytes, description_property_bytes)
+}
+
 fn create_random_entity_op() -> Op {
     Op {
         payload: Some(wire::pb::grc20::op::Payload::UpdateEntity(Entity {
             id: random_uuid_bytes(),
-            values: vec![
-                Value {
-                    property: random_uuid_bytes(),
-                    value: format!("Random value {}", rand::thread_rng().gen::<u32>()),
-                    options: None,
-                }
-            ],
+            values: vec![Value {
+                property: random_uuid_bytes(),
+                value: format!("Random value {}", rand::thread_rng().gen::<u32>()),
+                options: None,
+            }],
+        })),
+    }
+}
+
+fn create_name_description_entity_op() -> Op {
+    let mut rng = rand::thread_rng();
+    let entity_id = random_uuid_bytes();
+    let (name_property_bytes, description_property_bytes) = get_name_description_property_bytes();
+
+    let mut values = Vec::new();
+
+    // Always add name value
+    values.push(Value {
+        property: name_property_bytes,
+        value: format!("Entity {}", rng.gen::<u32>()),
+        options: None,
+    });
+
+    // Add description value (sometimes)
+    if rng.gen_bool(0.7) {
+        values.push(Value {
+            property: description_property_bytes,
+            value: format!("Description for entity {}", rng.gen::<u32>()),
+            options: None,
+        });
+    }
+
+    Op {
+        payload: Some(wire::pb::grc20::op::Payload::UpdateEntity(Entity {
+            id: entity_id,
+            values,
         })),
     }
 }
@@ -163,10 +234,11 @@ fn create_sample_edit(space_id: String, name: String) -> HermesEdit {
     let mut ops = Vec::new();
 
     for _ in 0..op_count {
-        let op_type = rng.gen_range(0..3);
+        let op_type = rng.gen_range(0..4);
         ops.push(match op_type {
             0 => create_random_entity_op(),
             1 => create_random_property_op(),
+            2 => create_name_description_entity_op(),
             _ => create_random_relation_op(),
         });
     }
@@ -180,7 +252,10 @@ fn create_sample_edit(space_id: String, name: String) -> HermesEdit {
         space_id,
         is_canonical: rng.gen_bool(0.8),
         meta: Some(BlockchainMetadata {
-            created_at: Utc::now().timestamp().try_into().expect("timestamp should be positive"),
+            created_at: Utc::now()
+                .timestamp()
+                .try_into()
+                .expect("timestamp should be positive"),
             created_by: random_address(),
             block_number: rng.gen_range(1000000..9999999),
             cursor: format!("cursor_{}", Uuid::new_v4()),
@@ -213,9 +288,7 @@ fn send_edit(
             );
             Ok(())
         }
-        Err((e, _)) => {
-            Err(Box::new(e))
-        }
+        Err((e, _)) => Err(Box::new(e)),
     }
 }
 
@@ -228,8 +301,12 @@ fn send_space(
     space.encode(&mut payload)?;
 
     let space_type = match &space.payload {
-        Some(hermes_schema::pb::space::hermes_create_space::Payload::PersonalSpace(_)) => "PERSONAL",
-        Some(hermes_schema::pb::space::hermes_create_space::Payload::DefaultDaoSpace(_)) => "DEFAULT_DAO",
+        Some(hermes_schema::pb::space::hermes_create_space::Payload::PersonalSpace(_)) => {
+            "PERSONAL"
+        }
+        Some(hermes_schema::pb::space::hermes_create_space::Payload::DefaultDaoSpace(_)) => {
+            "DEFAULT_DAO"
+        }
         None => "UNKNOWN",
     };
 
@@ -244,15 +321,10 @@ fn send_space(
     match producer.send(record) {
         Ok(_) => {
             producer.flush(Duration::from_secs(5))?;
-            println!(
-                "Space created successfully: {} type",
-                space_type
-            );
+            println!("Space created successfully: {} type", space_type);
             Ok(())
         }
-        Err((e, _)) => {
-            Err(Box::new(e))
-        }
+        Err((e, _)) => Err(Box::new(e)),
     }
 }
 
@@ -265,9 +337,15 @@ fn send_trust_extension(
     trust_extension.encode(&mut payload)?;
 
     let extension_type = match &trust_extension.extension {
-        Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Verified(_)) => "VERIFIED",
-        Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Related(_)) => "RELATED",
-        Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Subtopic(_)) => "SUBTOPIC",
+        Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Verified(_)) => {
+            "VERIFIED"
+        }
+        Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Related(_)) => {
+            "RELATED"
+        }
+        Some(hermes_schema::pb::space::hermes_space_trust_extension::Extension::Subtopic(_)) => {
+            "SUBTOPIC"
+        }
         None => "UNKNOWN",
     };
 
@@ -282,15 +360,10 @@ fn send_trust_extension(
     match producer.send(record) {
         Ok(_) => {
             producer.flush(Duration::from_secs(5))?;
-            println!(
-                "Trust extension sent successfully: {} type",
-                extension_type
-            );
+            println!("Trust extension sent successfully: {} type", extension_type);
             Ok(())
         }
-        Err((e, _)) => {
-            Err(Box::new(e))
-        }
+        Err((e, _)) => Err(Box::new(e)),
     }
 }
 
@@ -362,7 +435,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 created_spaces[1].space_id.clone(),
                 created_spaces[2].space_id.clone(),
             );
-            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &related_ext) {
+            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &related_ext)
+            {
                 eprintln!("Failed to send related trust extension: {}", e);
             }
             thread::sleep(Duration::from_millis(300));
@@ -374,7 +448,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 created_spaces[2].space_id.clone(),
                 created_spaces[3].space_id.clone(),
             );
-            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &verified_ext) {
+            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &verified_ext)
+            {
                 eprintln!("Failed to send verified trust extension: {}", e);
             }
             thread::sleep(Duration::from_millis(300));
@@ -386,7 +461,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 created_spaces[0].space_id.clone(),
                 created_spaces[3].topic_id.clone(),
             );
-            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &subtopic_ext) {
+            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &subtopic_ext)
+            {
                 eprintln!("Failed to send subtopic trust extension: {}", e);
             }
             thread::sleep(Duration::from_millis(300));
@@ -398,7 +474,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 created_spaces[3].space_id.clone(),
                 created_spaces[4].space_id.clone(),
             );
-            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &related_ext) {
+            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &related_ext)
+            {
                 eprintln!("Failed to send related trust extension: {}", e);
             }
             thread::sleep(Duration::from_millis(300));
@@ -410,7 +487,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 created_spaces[4].space_id.clone(),
                 created_spaces[0].space_id.clone(),
             );
-            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &verified_ext) {
+            if let Err(e) = send_trust_extension(&producer, "space.trust.extensions", &verified_ext)
+            {
                 eprintln!("Failed to send verified trust extension: {}", e);
             }
             thread::sleep(Duration::from_millis(300));
@@ -421,10 +499,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Producer finished. Exiting.\n");
 
     Ok(())
-    
+
     // Random flow disabled for now
     // println!("=== Switching to random emission mode ===\n");
-    // 
+    //
     // let mut edit_counter = 50u64;
     // let mut loop_counter = 0u64;
     // let mut created_spaces: Vec<Vec<u8>> = Vec::new();
@@ -439,7 +517,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // loop {
     //     thread::sleep(Duration::from_secs(3));
     //     loop_counter += 1;
-    //     
+    //
     //     edit_counter += 1;
     //     let space_id_bytes = created_spaces[rand::thread_rng().gen_range(0..created_spaces.len())].clone();
     //     let space_id_hex = hex::encode(&space_id_bytes);

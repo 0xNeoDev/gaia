@@ -12,6 +12,8 @@ hex = "0.4"
 rand = "0.8"
 wire = { path = "../wire" }
 hermes-schema = { path = "../hermes-schema" }
+sdk = { path = "../sdk" }
+indexer_utils = { path = "../indexer_utils" }
 
 [build-dependencies]
 prost-build = "0.13.5"

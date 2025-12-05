@@ -2380,10 +2380,12 @@ dependencies = [
  "chrono",
  "hermes-schema",
  "hex",
+ "indexer_utils",
  "prost 0.13.5",
  "prost-build 0.13.5",
  "rand 0.8.5",
  "rdkafka",
+ "sdk",
  "uuid",
  "wire",
 ]
@@ -4521,13 +4523,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "490dcfcbfef26be6800d11870ff2df8774fa6e86d047e3e8c8a76b25655e41ca"
 
 [[package]]
+name = "sdk"
+version = "0.1.0"
+
+[[package]]
 name = "search-indexer"
 version = "0.1.0"
 dependencies = [
  "axiom-rs",
  "chrono",
  "dotenv",
- "search-indexer-pipeline",
+ "search-indexer-ingest",
  "search-indexer-repository",
  "search-indexer-shared",
  "serde_json",
@@ -4538,7 +4544,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "search-indexer-pipeline"
+name = "search-indexer-ingest"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -4549,6 +4555,7 @@ dependencies = [
  "indexer_utils",
  "prost 0.13.5",
  "rdkafka",
+ "sdk",
  "search-indexer-repository",
  "search-indexer-shared",
  "serde_json",
@@ -4565,6 +4572,7 @@ name = "search-indexer-repository"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "opensearch",
  "search-indexer-shared",
  "serde",

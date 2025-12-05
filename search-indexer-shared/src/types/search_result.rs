@@ -16,8 +16,9 @@ pub struct SearchResult {
     /// The space this entity belongs to.
     pub space_id: Uuid,
 
-    /// The entity's display name.
-    pub name: String,
+    /// Optional entity display name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 
     /// Optional description text.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -109,7 +110,7 @@ mod tests {
         let results = vec![SearchResult {
             entity_id: Uuid::new_v4(),
             space_id: Uuid::new_v4(),
-            name: "Test".to_string(),
+            name: Some("Test".to_string()),
             description: None,
             avatar: None,
             cover: None,
@@ -132,7 +133,7 @@ mod tests {
             vec![SearchResult {
                 entity_id: Uuid::new_v4(),
                 space_id: Uuid::new_v4(),
-                name: "Test".to_string(),
+                name: Some("Test".to_string()),
                 description: Some("Description".to_string()),
                 avatar: None,
                 cover: None,

@@ -219,4 +219,3 @@ mod tests {
         assert!(request.has_updates());
     }
 }
-

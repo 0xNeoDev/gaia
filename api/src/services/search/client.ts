@@ -3,13 +3,12 @@
  *
  * This module defines the abstract interface for search operations,
  * allowing for dependency injection of different implementations.
+ * Note: This TypeScript API is read-only - it only queries the search index.
+ * All indexing/updating/deleting is done by the Rust search-indexer service.
  */
 
-import type {
-  SearchQuery,
-  SearchResponse,
-  EntityDocument,
-} from "./types";
+import type { SearchQuery, SearchResponse, SearchResult, SearchError } from "./types";
+import { isSearchError } from "./types";
 
 /**
  * Abstract search client interface for dependency injection.
@@ -39,30 +38,10 @@ export interface SearchClient {
   search(query: SearchQuery): Promise<SearchResponse>;
 
   /**
-   * Index a single document.
-   *
-   * @param document - The entity document to index
-   * @throws Error if indexing fails
-   */
-  indexDocument(document: EntityDocument): Promise<void>;
-
-  /**
    * Check if the search engine is healthy.
    *
    * @returns Promise resolving to true if healthy
    */
   healthCheck(): Promise<boolean>;
-}
-
-/**
- * Create a search client wrapper.
- *
- * This factory function allows for easy dependency injection.
- *
- * @param client - The underlying search client implementation
- * @returns The wrapped search client
- */
-export function createSearchClient(client: SearchClient): SearchClient {
-  return client;
 }
 

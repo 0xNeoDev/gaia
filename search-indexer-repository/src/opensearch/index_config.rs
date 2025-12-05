@@ -4,8 +4,25 @@
 
 use serde_json::{json, Value};
 
-/// The name of the search index.
+/// The alias name for the search index (used for all operations).
+pub const INDEX_ALIAS: &str = "entities";
+
+/// The base name of the search index (without version).
 pub const INDEX_NAME: &str = "entities";
+
+/// Get the versioned index name.
+///
+/// # Arguments
+///
+/// * `version` - The version number (defaults to 1 if None)
+///
+/// # Returns
+///
+/// The versioned index name (e.g., "entities_v1")
+pub fn get_versioned_index_name(version: Option<u32>) -> String {
+    let v = version.unwrap_or(1);
+    format!("{}_v{}", INDEX_NAME, v)
+}
 
 /// Get the index settings and mappings for the entity search index.
 ///
@@ -16,9 +33,13 @@ pub const INDEX_NAME: &str = "entities";
 ///
 /// # Sharding Configuration
 ///
-/// - 3 primary shards for horizontal scaling
+/// - 1 primary shard
 /// - 1 replica for redundancy
-pub fn get_index_settings() -> Value {
+///
+/// # Arguments
+///
+/// * `version` - Optional version number (currently unused, reserved for future version-specific settings)
+pub fn get_index_settings(_version: Option<u32>) -> Value {
     json!({
         "settings": {
             "number_of_shards": 1,
@@ -74,7 +95,7 @@ mod tests {
 
     #[test]
     fn test_index_settings_structure() {
-        let settings = get_index_settings();
+        let settings = get_index_settings(None);
 
         // Check settings exist
         assert!(settings["settings"]["number_of_shards"].is_number());
@@ -113,5 +134,14 @@ mod tests {
     #[test]
     fn test_index_name() {
         assert_eq!(INDEX_NAME, "entities");
+        assert_eq!(INDEX_ALIAS, "entities");
+    }
+
+    #[test]
+    fn test_versioned_index_name() {
+        assert_eq!(get_versioned_index_name(None), "entities_v1");
+        assert_eq!(get_versioned_index_name(Some(1)), "entities_v1");
+        assert_eq!(get_versioned_index_name(Some(2)), "entities_v2");
+        assert_eq!(get_versioned_index_name(Some(42)), "entities_v42");
     }
 }

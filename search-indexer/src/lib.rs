@@ -3,7 +3,7 @@
 //! Main library for the Geo Knowledge Graph search indexer.
 //!
 //! This crate provides the entry point and configuration for running
-//! the search indexer pipeline.
+//! the search indexer ingest.
 
 pub mod config;
 
@@ -18,9 +18,9 @@ pub enum IndexingError {
     #[error("Configuration error: {0}")]
     ConfigError(String),
 
-    /// Pipeline error.
-    #[error("Pipeline error: {0}")]
-    PipelineError(#[from] search_indexer_pipeline::PipelineError),
+    /// Ingest error.
+    #[error("Ingest error: {0}")]
+    IngestError(#[from] search_indexer_ingest::IngestError),
 
     /// Search error.
     #[error("Search error: {0}")]

@@ -19,7 +19,7 @@ for fast full-text search across the Knowledge Graph.
                    ▼                         ▼
         ┌──────────────────┐      ┌──────────────────┐
         │      Kafka       │      │    OpenSearch    │
-        │  (knowledge.edits)│      │  (geo_entities)  │
+        │ (knowledge.edits)│      │    (entities)    │
         └──────────────────┘      └──────────────────┘
 ```
 
@@ -32,9 +32,19 @@ Environment variables:
 | `OPENSEARCH_URL` | OpenSearch server URL | `http://localhost:9200` |
 | `KAFKA_BROKER` | Kafka broker address | `localhost:9092` |
 | `KAFKA_GROUP_ID` | Consumer group ID | `search-indexer` |
+| `OPENSEARCH_CONNECTION_MODE` | Connection mode: `fail-fast` or `retry` | `retry` |
+| `OPENSEARCH_RETRY_INTERVAL_SECS` | Retry interval in seconds (retry mode only) | `15` |
 | `AXIOM_TOKEN` | Axiom API token (optional) | - |
 | `AXIOM_DATASET` | Axiom dataset name | `gaia.search-indexer` |
 | `RUST_LOG` | Log level filter | `search_indexer=info` |
+
+### Connection Modes
+
+The search-indexer supports two connection modes for OpenSearch:
+
+- **`retry`** (default): Continuously retries connecting to OpenSearch every 15 seconds (configurable via `OPENSEARCH_RETRY_INTERVAL_SECS`) until successful. This is useful when OpenSearch may not be immediately available (e.g., during container startup).
+
+- **`fail-fast`**: Immediately fails if unable to connect to OpenSearch. Useful when you want the container to crash if OpenSearch is unavailable, allowing orchestration systems (like Kubernetes) to handle restarts.
 
 ## Running
 
@@ -60,10 +70,47 @@ cargo run --release
 
 ### Docker
 
+#### Building the image
+
 ```bash
-docker build -t search-indexer .
+# From the repository root
+docker build -f search-indexer/Dockerfile -t search-indexer .
+```
+
+#### Running with docker-compose
+
+The search-indexer is included in the `search-indexer-deploy/docker-compose.yaml` file:
+
+```bash
+# Start OpenSearch and search-indexer together
+cd search-indexer-deploy
+docker-compose up -d
+
+# View logs
+docker-compose logs -f search-indexer
+```
+
+**Note**: The docker-compose setup connects to the Kafka broker from the `hermes` docker-compose network. Make sure the hermes Kafka broker is running:
+
+```bash
+# Start Kafka broker
+cd ../hermes
+docker-compose up -d kafka
+```
+
+#### Running standalone
+
+```bash
+# With retry mode (default)
 docker run -e OPENSEARCH_URL=http://opensearch:9200 \
-           -e KAFKA_BROKER=kafka:9092 \
+           -e KAFKA_BROKER=kafka:29092 \
+           -e OPENSEARCH_CONNECTION_MODE=retry \
+           search-indexer
+
+# With fail-fast mode
+docker run -e OPENSEARCH_URL=http://opensearch:9200 \
+           -e KAFKA_BROKER=kafka:29092 \
+           -e OPENSEARCH_CONNECTION_MODE=fail-fast \
            search-indexer
 ```
 

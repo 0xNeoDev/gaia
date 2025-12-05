@@ -48,5 +48,5 @@ Defines the scope of a search query:
 - `Global` - Search across all entities
 - `GlobalBySpaceScore` - Search globally with space score breakdowns
 - `SpaceSingle` - Search within a single space only
-- `SpaceAndAllSubspaces` - Search within a space and its subspaces
+- `Space` - Search within a space and its subspaces
 
