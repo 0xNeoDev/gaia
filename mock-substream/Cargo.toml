@@ -6,6 +6,9 @@ description = "Unified mock substream event generation for testing"
 
 [dependencies]
 rand = { version = "0.8", optional = true }
+bs58 = "0.5.1"
+uuid = { version = "1.17.0", features = ["v4"] }
+sdk = { path = "../sdk" }
 
 [features]
 default = []

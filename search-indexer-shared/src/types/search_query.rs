@@ -28,16 +28,13 @@ pub enum SearchScope {
     /// Search within a space and all of its subspaces.
     /// Uses the space's web of trust for filtering.
     /// Requires `space_ids` with one or more elements.
-    SpaceAndAllSubspaces,
+    Space,
 }
 
 impl SearchScope {
     /// Returns true if this scope requires space_ids.
     pub fn requires_space_ids(&self) -> bool {
-        matches!(
-            self,
-            SearchScope::SpaceSingle | SearchScope::SpaceAndAllSubspaces
-        )
+        matches!(self, SearchScope::SpaceSingle | SearchScope::Space)
     }
 }
 
@@ -58,7 +55,7 @@ pub struct SearchQuery {
 
     /// The space IDs for space-scoped searches.
     /// - For `SpaceSingle`: requires exactly one space ID
-    /// - For `SpaceAndAllSubspaces`: requires one or more space IDs
+    /// - For `Space`: requires one or more space IDs
     #[serde(skip_serializing_if = "Option::is_none")]
     pub space_ids: Option<Vec<Uuid>>,
 
@@ -147,7 +144,7 @@ impl SearchQuery {
     pub fn in_spaces(query: impl Into<String>, space_ids: Vec<Uuid>) -> Self {
         Self {
             query: query.into(),
-            scope: SearchScope::SpaceAndAllSubspaces,
+            scope: SearchScope::Space,
             space_ids: Some(space_ids),
             limit: default_limit(),
             offset: 0,
@@ -215,7 +212,7 @@ mod tests {
         assert!(!SearchScope::Global.requires_space_ids());
         assert!(!SearchScope::GlobalBySpaceScore.requires_space_ids());
         assert!(SearchScope::SpaceSingle.requires_space_ids());
-        assert!(SearchScope::SpaceAndAllSubspaces.requires_space_ids());
+        assert!(SearchScope::Space.requires_space_ids());
     }
 
     #[test]
@@ -241,7 +238,7 @@ mod tests {
         let space1 = Uuid::new_v4();
         let space2 = Uuid::new_v4();
         let query = SearchQuery::in_spaces("test", vec![space1, space2]);
-        assert_eq!(query.scope, SearchScope::SpaceAndAllSubspaces);
+        assert_eq!(query.scope, SearchScope::Space);
         assert_eq!(query.space_ids, Some(vec![space1, space2]));
     }
 
@@ -276,9 +273,9 @@ mod tests {
         query.space_ids = Some(vec![Uuid::new_v4()]);
         assert!(query.validate().is_ok());
 
-        // SpaceAndAllSubspaces with multiple space_ids (valid)
+        // Space with multiple space_ids (valid)
         let mut query = SearchQuery::global("test");
-        query.scope = SearchScope::SpaceAndAllSubspaces;
+        query.scope = SearchScope::Space;
         query.space_ids = Some(vec![Uuid::new_v4(), Uuid::new_v4()]);
         assert!(query.validate().is_ok());
     }

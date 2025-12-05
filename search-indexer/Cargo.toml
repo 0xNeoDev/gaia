@@ -7,7 +7,7 @@ description = "Main binary for the Geo Knowledge Graph search indexer"
 [dependencies]
 search-indexer-shared = { path = "../search-indexer-shared" }
 search-indexer-repository = { path = "../search-indexer-repository" }
-search-indexer-pipeline = { path = "../search-indexer-pipeline" }
+search-indexer-ingest = { path = "../search-indexer-ingest" }
 
 tokio = { version = "1.38.0", features = ["macros", "rt-multi-thread", "signal"] }
 dotenv = "0.15.0"

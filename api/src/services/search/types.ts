@@ -2,6 +2,8 @@
  * Search service types.
  *
  * These types define the API contract for the search service.
+ * Note: This TypeScript API is read-only - it only queries the search index.
+ * All indexing/updating/deleting is done by the Rust search-indexer service.
  */
 
 /**
@@ -11,7 +13,7 @@ export type SearchScope =
   | "GLOBAL"
   | "GLOBAL_BY_SPACE_SCORE"
   | "SPACE_SINGLE"
-  | "SPACE_AND_ALL_SUBSPACES";
+  | "SPACE";
 
 /**
  * Search query parameters.
@@ -22,11 +24,10 @@ export interface SearchQuery {
   /** The scope of the search. */
   scope: SearchScope;
   /**
-   * Space IDs for space-scoped searches.
-   * - For SPACE_SINGLE: exactly one space ID
-   * - For SPACE_AND_ALL_SUBSPACES: one or more space IDs
+   * Space ID for space-scoped searches.
+   * Required for SPACE_SINGLE and SPACE scopes.
    */
-  spaceIds?: string[];
+  space_id?: string;
   /** Maximum number of results to return (default: 20, max: 100). */
   limit?: number;
   /** Offset for pagination (default: 0). */
@@ -41,22 +42,20 @@ export interface SearchResult {
   entityId: string;
   /** The space this entity belongs to. */
   spaceId: string;
-  /** The entity's display name. */
-  name: string;
+  /** Optional entity display name. */
+  name?: string;
   /** Optional description text. */
   description?: string;
   /** Optional avatar image URL. */
   avatar?: string;
   /** Optional cover image URL. */
   cover?: string;
-  /** Global entity score (null until scoring service is implemented). */
+  /** Global entity score. */
   entityGlobalScore?: number;
-  /** Space score (null until scoring service is implemented). */
+  /** Space score. */
   spaceScore?: number;
-  /** Entity-space score (null until scoring service is implemented). */
+  /** Entity-space score. */
   entitySpaceScore?: number;
-  /** Relevance score from the search engine. */
-  relevanceScore: number;
 }
 
 /**
@@ -72,26 +71,50 @@ export interface SearchResponse {
 }
 
 /**
- * Entity document for indexing.
+ * Search error types.
  */
-export interface EntityDocument {
-  /** The entity's unique identifier. */
-  entityId: string;
-  /** The space this entity belongs to. */
-  spaceId: string;
-  /** The entity's display name. */
-  name: string;
-  /** Optional description text. */
-  description?: string;
-  /** Optional avatar image URL. */
-  avatar?: string;
-  /** Optional cover image URL. */
-  cover?: string;
-  /** Global entity score. */
-  entityGlobalScore?: number;
-  /** Space score. */
-  spaceScore?: number;
-  /** Entity-space score. */
-  entitySpaceScore?: number;
+export enum SearchErrorType {
+  ValidationError = "ValidationError",
+  ConnectionError = "ConnectionError",
+  QueryError = "QueryError",
+  Unknown = "Unknown",
+}
+
+/**
+ * Search error class.
+ */
+export class SearchError extends Error {
+  constructor(
+    public readonly type: SearchErrorType,
+    message: string,
+    public readonly details?: unknown
+  ) {
+    super(message);
+    this.name = "SearchError";
+    Object.setPrototypeOf(this, SearchError.prototype);
+  }
+
+  static validationError(message: string, details?: unknown): SearchError {
+    return new SearchError(SearchErrorType.ValidationError, message, details);
+  }
+
+  static connectionError(message: string, details?: unknown): SearchError {
+    return new SearchError(SearchErrorType.ConnectionError, message, details);
+  }
+
+  static queryError(message: string, details?: unknown): SearchError {
+    return new SearchError(SearchErrorType.QueryError, message, details);
+  }
+
+  static unknown(message: string, details?: unknown): SearchError {
+    return new SearchError(SearchErrorType.Unknown, message, details);
+  }
+}
+
+/**
+ * Type guard to check if a value is a SearchError.
+ */
+export function isSearchError(value: unknown): value is SearchError {
+  return value instanceof SearchError;
 }
 

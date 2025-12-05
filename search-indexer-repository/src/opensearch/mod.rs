@@ -9,4 +9,3 @@ mod queries;
 
 pub use client::OpenSearchClient;
 pub use index_config::INDEX_NAME;
-

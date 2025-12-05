@@ -17,10 +17,14 @@ use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::errors::SearchError;
-use crate::interfaces::{SearchEngineClient, UpdateEntityRequest};
+use crate::errors::{SearchError, SearchIndexError};
+use crate::interfaces::UpdateEntityRequest as OldUpdateEntityRequest;
+use crate::interfaces::{SearchEngineClient, SearchIndexProvider};
 use crate::opensearch::index_config::{get_index_settings, INDEX_NAME};
 use crate::opensearch::queries::build_search_query;
+use crate::types::{
+    BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest,
+};
 use search_indexer_shared::{EntityDocument, SearchQuery, SearchResponse, SearchResult};
 
 /// OpenSearch client implementation.
@@ -106,7 +110,7 @@ impl OpenSearchClient {
         Some(SearchResult {
             entity_id: Uuid::parse_str(source["entity_id"].as_str()?).ok()?,
             space_id: Uuid::parse_str(source["space_id"].as_str()?).ok()?,
-            name: source["name"].as_str()?.to_string(),
+            name: source["name"].as_str().map(String::from),
             description: source["description"].as_str().map(String::from),
             avatar: source["avatar"].as_str().map(String::from),
             cover: source["cover"].as_str().map(String::from),
@@ -123,9 +127,7 @@ impl SearchEngineClient for OpenSearchClient {
     #[instrument(skip(self), fields(query = %query.query, scope = ?query.scope))]
     async fn search(&self, query: &SearchQuery) -> Result<SearchResponse, SearchError> {
         // Validate query
-        query
-            .validate()
-            .map_err(|e| SearchError::InvalidQuery(e))?;
+        query.validate().map_err(|e| SearchError::InvalidQuery(e))?;
 
         let search_body = build_search_query(query);
 
@@ -157,7 +159,9 @@ impl SearchEngineClient for OpenSearchClient {
             .map_err(|e| SearchError::ParseError(e.to_string()))?;
 
         let took = response_body["took"].as_u64().unwrap_or(0);
-        let total = response_body["hits"]["total"]["value"].as_u64().unwrap_or(0);
+        let total = response_body["hits"]["total"]["value"]
+            .as_u64()
+            .unwrap_or(0);
 
         let results: Vec<SearchResult> = response_body["hits"]["hits"]
             .as_array()
@@ -249,9 +253,7 @@ impl SearchEngineClient for OpenSearchClient {
                 .as_array()
                 .and_then(|items| {
                     items.iter().find_map(|item| {
-                        item["index"]["error"]["reason"]
-                            .as_str()
-                            .map(String::from)
+                        item["index"]["error"]["reason"].as_str().map(String::from)
                     })
                 })
                 .unwrap_or_else(|| "Unknown bulk index error".to_string());
@@ -265,7 +267,7 @@ impl SearchEngineClient for OpenSearchClient {
     }
 
     #[instrument(skip(self, request), fields(entity_id = %request.entity_id, space_id = %request.space_id))]
-    async fn update_document(&self, request: &UpdateEntityRequest) -> Result<(), SearchError> {
+    async fn update_document(&self, request: &OldUpdateEntityRequest) -> Result<(), SearchError> {
         if !request.has_updates() {
             return Ok(());
         }
@@ -358,7 +360,7 @@ impl SearchEngineClient for OpenSearchClient {
 
         info!(index = %self.index_name, "Creating index");
 
-        let settings = get_index_settings();
+        let settings = get_index_settings(None);
 
         let create_response = self
             .client
@@ -405,6 +407,190 @@ impl SearchEngineClient for OpenSearchClient {
     }
 }
 
+#[async_trait]
+impl SearchIndexProvider for OpenSearchClient {
+    async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>, SearchIndexError> {
+        // Use the existing SearchEngineClient implementation
+        let response = <Self as SearchEngineClient>::search(self, query)
+            .await
+            .map_err(|e| match e {
+                SearchError::ConnectionError(msg) => SearchIndexError::connection(msg),
+                SearchError::QueryError(msg) => SearchIndexError::index(msg),
+                SearchError::ParseError(msg) => SearchIndexError::unknown(msg),
+                _ => SearchIndexError::unknown(e.to_string()),
+            })?;
+
+        Ok(response.results)
+    }
+
+    async fn index_document(&self, document: &EntityDocument) -> Result<(), SearchIndexError> {
+        <Self as SearchEngineClient>::index_document(self, document)
+            .await
+            .map_err(|e| match e {
+                SearchError::ConnectionError(msg) => SearchIndexError::connection(msg),
+                SearchError::IndexError(msg) => SearchIndexError::index(msg),
+                _ => SearchIndexError::unknown(e.to_string()),
+            })
+    }
+
+    async fn update_document(&self, request: &UpdateEntityRequest) -> Result<(), SearchIndexError> {
+        // Convert from new UpdateEntityRequest to old UpdateEntityRequest
+        let old_request = crate::interfaces::UpdateEntityRequest {
+            entity_id: Uuid::parse_str(&request.entity_id)
+                .map_err(|e| SearchIndexError::validation(format!("Invalid entity_id: {}", e)))?,
+            space_id: Uuid::parse_str(&request.space_id)
+                .map_err(|e| SearchIndexError::validation(format!("Invalid space_id: {}", e)))?,
+            name: request.name.clone(),
+            description: request.description.clone(),
+            avatar: request.avatar.clone(),
+            cover: request.cover.clone(),
+        };
+
+        <Self as SearchEngineClient>::update_document(self, &old_request)
+            .await
+            .map_err(|e| match e {
+                SearchError::NotFound(_msg) => {
+                    SearchIndexError::document_not_found(&request.entity_id, &request.space_id)
+                }
+                SearchError::UpdateError(msg) => SearchIndexError::index(msg),
+                SearchError::ConnectionError(msg) => SearchIndexError::connection(msg),
+                _ => SearchIndexError::unknown(e.to_string()),
+            })
+    }
+
+    async fn delete_document(&self, request: &DeleteEntityRequest) -> Result<(), SearchIndexError> {
+        let entity_id = Uuid::parse_str(&request.entity_id)
+            .map_err(|e| SearchIndexError::validation(format!("Invalid entity_id: {}", e)))?;
+        let space_id = Uuid::parse_str(&request.space_id)
+            .map_err(|e| SearchIndexError::validation(format!("Invalid space_id: {}", e)))?;
+
+        <Self as SearchEngineClient>::delete_document(self, &entity_id, &space_id)
+            .await
+            .map_err(|e| match e {
+                SearchError::ConnectionError(msg) => SearchIndexError::connection(msg),
+                SearchError::DeleteError(msg) => SearchIndexError::index(msg),
+                _ => SearchIndexError::unknown(e.to_string()),
+            })
+    }
+
+    async fn bulk_index_documents(
+        &self,
+        documents: &[EntityDocument],
+    ) -> Result<BatchOperationSummary, SearchIndexError> {
+        // Use the existing bulk_index implementation
+        <Self as SearchEngineClient>::bulk_index(self, documents)
+            .await
+            .map_err(|e| SearchIndexError::bulk_operation(e.to_string()))?;
+
+        // Build success summary
+        let results: Vec<BatchOperationResult> = documents
+            .iter()
+            .map(|doc| BatchOperationResult {
+                entity_id: doc.entity_id.to_string(),
+                space_id: doc.space_id.to_string(),
+                success: true,
+                error: None,
+            })
+            .collect();
+
+        Ok(BatchOperationSummary {
+            total: documents.len(),
+            succeeded: documents.len(),
+            failed: 0,
+            results,
+        })
+    }
+
+    async fn bulk_update_documents(
+        &self,
+        requests: &[UpdateEntityRequest],
+    ) -> Result<BatchOperationSummary, SearchIndexError> {
+        let mut results = Vec::new();
+        let mut succeeded = 0;
+        let mut failed = 0;
+
+        for request in requests {
+            match SearchIndexProvider::update_document(self, request).await {
+                Ok(()) => {
+                    succeeded += 1;
+                    results.push(BatchOperationResult {
+                        entity_id: request.entity_id.clone(),
+                        space_id: request.space_id.clone(),
+                        success: true,
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    failed += 1;
+                    results.push(BatchOperationResult {
+                        entity_id: request.entity_id.clone(),
+                        space_id: request.space_id.clone(),
+                        success: false,
+                        error: Some(e.clone()),
+                    });
+                }
+            }
+        }
+
+        Ok(BatchOperationSummary {
+            total: requests.len(),
+            succeeded,
+            failed,
+            results,
+        })
+    }
+
+    async fn bulk_delete_documents(
+        &self,
+        requests: &[DeleteEntityRequest],
+    ) -> Result<BatchOperationSummary, SearchIndexError> {
+        let mut results = Vec::new();
+        let mut succeeded = 0;
+        let mut failed = 0;
+
+        for request in requests {
+            match SearchIndexProvider::delete_document(self, request).await {
+                Ok(()) => {
+                    succeeded += 1;
+                    results.push(BatchOperationResult {
+                        entity_id: request.entity_id.clone(),
+                        space_id: request.space_id.clone(),
+                        success: true,
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    // Document not found is considered a successful delete
+                    if matches!(e, SearchIndexError::DocumentNotFound(_)) {
+                        succeeded += 1;
+                        results.push(BatchOperationResult {
+                            entity_id: request.entity_id.clone(),
+                            space_id: request.space_id.clone(),
+                            success: true,
+                            error: None,
+                        });
+                    } else {
+                        failed += 1;
+                        results.push(BatchOperationResult {
+                            entity_id: request.entity_id.clone(),
+                            space_id: request.space_id.clone(),
+                            success: false,
+                            error: Some(e.clone()),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(BatchOperationSummary {
+            total: requests.len(),
+            succeeded,
+            failed,
+            results,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,7 +622,7 @@ mod tests {
 
         let result = OpenSearchClient::parse_hit(&hit).unwrap();
 
-        assert_eq!(result.name, "Test Entity");
+        assert_eq!(result.name, Some("Test Entity".to_string()));
         assert_eq!(result.description, Some("A test description".to_string()));
         assert_eq!(result.relevance_score, 1.5);
     }
@@ -454,9 +640,25 @@ mod tests {
 
         let result = OpenSearchClient::parse_hit(&hit).unwrap();
 
-        assert_eq!(result.name, "Minimal");
+        assert_eq!(result.name, Some("Minimal".to_string()));
         assert!(result.description.is_none());
         assert!(result.avatar.is_none());
+    }
+
+    #[test]
+    fn test_parse_hit_no_name() {
+        let hit = json!({
+            "_source": {
+                "entity_id": "550e8400-e29b-41d4-a716-446655440000",
+                "space_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+            },
+            "_score": 0.5
+        });
+
+        let result = OpenSearchClient::parse_hit(&hit).unwrap();
+
+        assert!(result.name.is_none());
+        assert!(result.description.is_none());
     }
 
     #[test]
@@ -472,4 +674,3 @@ mod tests {
         assert!(result.is_none());
     }
 }
-

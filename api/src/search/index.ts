@@ -14,7 +14,7 @@ const VALID_SCOPES: Set<SearchScope> = new Set([
   "GLOBAL",
   "GLOBAL_BY_SPACE_SCORE",
   "SPACE_SINGLE",
-  "SPACE_AND_ALL_SUBSPACES",
+  "SPACE",
 ]);
 
 /**
@@ -100,7 +100,7 @@ export function createSearchRouter(searchClient: SearchClient) {
     const scope = scopeParam as SearchScope;
 
     // Validate space_id for space-scoped searches
-    if (scope === "SPACE_SINGLE" || scope === "SPACE_AND_ALL_SUBSPACES") {
+    if (scope === "SPACE_SINGLE" || scope === "SPACE") {
       if (!spaceId) {
         return c.json(
           {
@@ -157,25 +157,11 @@ export function createSearchRouter(searchClient: SearchClient) {
     // Execute search
     try {
       const trimmedQuery = query.trim();
-      
-      // If query is a UUID, do a direct lookup on entity_id field
-      // Still respect scope filtering
-      if (UUID_PATTERN.test(trimmedQuery)) {
-        const response = await searchClient.search({
-          query: trimmedQuery,
-          scope,
-          spaceIds: spaceId ? [spaceId] : undefined,
-          limit,
-          offset,
-        });
-
-        return c.json(response);
-      }
 
       const response = await searchClient.search({
         query: trimmedQuery,
         scope,
-        spaceIds: spaceId ? [spaceId] : undefined,
+        space_id: spaceId,
         limit,
         offset,
       });

@@ -16,7 +16,7 @@ use uuid::Uuid;
 ///
 /// - `entity_id`: Unique identifier for the entity
 /// - `space_id`: The space this entity belongs to
-/// - `name`: The entity's display name (primary search field)
+/// - `name`: Optional entity display name (primary search field)
 /// - `description`: Optional description text (secondary search field)
 /// - `avatar`: Optional avatar image URL
 /// - `cover`: Optional cover image URL
@@ -28,7 +28,8 @@ use uuid::Uuid;
 pub struct EntityDocument {
     pub entity_id: Uuid,
     pub space_id: Uuid,
-    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -54,7 +55,7 @@ impl EntityDocument {
     ///
     /// * `entity_id` - The unique identifier for the entity
     /// * `space_id` - The space this entity belongs to
-    /// * `name` - The entity's display name
+    /// * `name` - Optional entity display name
     /// * `description` - Optional description text
     ///
     /// # Example
@@ -66,14 +67,14 @@ impl EntityDocument {
     /// let doc = EntityDocument::new(
     ///     Uuid::new_v4(),
     ///     Uuid::new_v4(),
-    ///     "My Entity".to_string(),
+    ///     Some("My Entity".to_string()),
     ///     Some("A description".to_string()),
     /// );
     /// ```
     pub fn new(
         entity_id: Uuid,
         space_id: Uuid,
-        name: String,
+        name: Option<String>,
         description: Option<String>,
     ) -> Self {
         Self {
@@ -96,7 +97,7 @@ impl EntityDocument {
     ///
     /// * `entity_id` - The unique identifier for the entity
     /// * `space_id` - The space this entity belongs to
-    /// * `name` - The entity's display name
+    /// * `name` - Optional entity display name
     /// * `description` - Optional description text
     /// * `avatar` - Optional avatar image URL
     /// * `cover` - Optional cover image URL
@@ -104,7 +105,7 @@ impl EntityDocument {
     pub fn with_images(
         entity_id: Uuid,
         space_id: Uuid,
-        name: String,
+        name: Option<String>,
         description: Option<String>,
         avatar: Option<String>,
         cover: Option<String>,
@@ -140,7 +141,7 @@ mod tests {
     fn test_entity_document_new() {
         let entity_id = Uuid::new_v4();
         let space_id = Uuid::new_v4();
-        let name = "Test Entity".to_string();
+        let name = Some("Test Entity".to_string());
         let description = Some("Test description".to_string());
 
         let doc = EntityDocument::new(entity_id, space_id, name.clone(), description.clone());
@@ -157,11 +158,24 @@ mod tests {
     }
 
     #[test]
+    fn test_entity_document_new_without_name() {
+        let entity_id = Uuid::new_v4();
+        let space_id = Uuid::new_v4();
+
+        let doc = EntityDocument::new(entity_id, space_id, None, None);
+
+        assert_eq!(doc.entity_id, entity_id);
+        assert_eq!(doc.space_id, space_id);
+        assert!(doc.name.is_none());
+        assert!(doc.description.is_none());
+    }
+
+    #[test]
     fn test_document_id() {
         let entity_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let space_id = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
 
-        let doc = EntityDocument::new(entity_id, space_id, "Test".to_string(), None);
+        let doc = EntityDocument::new(entity_id, space_id, Some("Test".to_string()), None);
 
         assert_eq!(
             doc.document_id(),
@@ -174,7 +188,7 @@ mod tests {
         let doc = EntityDocument::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
-            "Test".to_string(),
+            Some("Test".to_string()),
             None,
         );
 
@@ -185,4 +199,3 @@ mod tests {
         assert_eq!(doc.name, deserialized.name);
     }
 }
-

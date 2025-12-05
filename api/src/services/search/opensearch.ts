@@ -3,6 +3,8 @@
  *
  * This module provides the concrete implementation of the SearchClient
  * interface using OpenSearch as the backend.
+ * Note: This implementation is read-only - it only queries the search index.
+ * All indexing/updating/deleting is done by the Rust search-indexer service.
  */
 
 import { Client } from "@opensearch-project/opensearch";
@@ -11,7 +13,6 @@ import type {
   SearchQuery,
   SearchResponse,
   SearchResult,
-  EntityDocument,
   SearchScope,
 } from "./types";
 
@@ -72,7 +73,7 @@ export class OpenSearchClient implements SearchClient {
     const results: SearchResult[] = hits.map((hit) => ({
       entityId: hit._source.entity_id as string,
       spaceId: hit._source.space_id as string,
-      name: hit._source.name as string,
+      name: hit._source.name as string | undefined,
       description: hit._source.description as string | undefined,
       avatar: hit._source.avatar as string | undefined,
       cover: hit._source.cover as string | undefined,
@@ -93,30 +94,6 @@ export class OpenSearchClient implements SearchClient {
   }
 
   /**
-   * Index a single document.
-   */
-  async indexDocument(document: EntityDocument): Promise<void> {
-    const docId = `${document.entityId}_${document.spaceId}`;
-
-    await this.client.index({
-      index: this.indexName,
-      id: docId,
-      body: {
-        entity_id: document.entityId,
-        space_id: document.spaceId,
-        name: document.name,
-        description: document.description,
-        avatar: document.avatar,
-        cover: document.cover,
-        entity_global_score: document.entityGlobalScore,
-        space_score: document.spaceScore,
-        entity_space_score: document.entitySpaceScore,
-        indexed_at: new Date().toISOString(),
-      },
-    });
-  }
-
-  /**
    * Check if the search engine is healthy.
    */
   async healthCheck(): Promise<boolean> {
@@ -134,7 +111,7 @@ export class OpenSearchClient implements SearchClient {
   private buildSearchBody(query: SearchQuery): object {
     // Check if the query is a UUID for direct ID lookup
     if (UUID_PATTERN.test(query.query)) {
-      return this.buildUuidQuery(query.query, query.scope, query.spaceIds);
+      return this.buildUuidQuery(query.query, query.scope, query.space_id);
     }
 
     // Build base text search query
@@ -148,17 +125,22 @@ export class OpenSearchClient implements SearchClient {
       case "GLOBAL_BY_SPACE_SCORE":
         return this.buildGlobalBySpaceScoreQuery(baseTextQuery);
 
-      case "SPACE_SINGLE":
-        if (query.spaceIds && query.spaceIds.length > 0) {
-          return this.buildSingleSpaceQuery(baseTextQuery, query.spaceIds[0]);
+      case "SPACE_SINGLE": {
+        if (!query.space_id) {
+          throw new Error("SPACE_SINGLE scope requires space_id");
         }
-        return this.buildGlobalQuery(baseTextQuery);
+        return this.buildSingleSpaceQuery(baseTextQuery, query.space_id);
+      }
 
-      case "SPACE_AND_ALL_SUBSPACES":
-        if (query.spaceIds && query.spaceIds.length > 0) {
-          return this.buildMultiSpaceQuery(baseTextQuery, query.spaceIds);
+      case "SPACE": {
+        if (!query.space_id) {
+          throw new Error("SPACE scope requires space_id");
         }
-        return this.buildGlobalQuery(baseTextQuery);
+        // For SPACE, we use the space_id as the root
+        // and would need to expand to include subspaces (implementation detail)
+        // For now, treat it as a single space query
+        return this.buildSingleSpaceQuery(baseTextQuery, query.space_id);
+      }
 
       default:
         return this.buildGlobalQuery(baseTextQuery);
@@ -176,7 +158,7 @@ export class OpenSearchClient implements SearchClient {
   private buildUuidQuery(
     uuid: string,
     scope: SearchScope,
-    spaceIds?: string[]
+    space_id?: string
   ): object {
     // term query is correct for keyword fields - performs exact match lookup
     const baseUuidQuery = {
@@ -208,12 +190,12 @@ export class OpenSearchClient implements SearchClient {
         };
 
       case "SPACE_SINGLE":
-        if (spaceIds && spaceIds.length > 0) {
+        if (space_id) {
           return {
             query: {
               bool: {
                 must: [baseUuidQuery],
-                filter: [{ term: { space_id: spaceIds[0] } }],
+                filter: [{ term: { space_id } }],
                 should: [
                   {
                     rank_feature: {
@@ -230,13 +212,15 @@ export class OpenSearchClient implements SearchClient {
           query: baseUuidQuery,
         };
 
-      case "SPACE_AND_ALL_SUBSPACES":
-        if (spaceIds && spaceIds.length > 0) {
+      case "SPACE":
+        if (space_id) {
+          // For SPACE, we would need to expand to include subspaces
+          // For now, treat it as a single space query
           return {
             query: {
               bool: {
                 must: [baseUuidQuery],
-                filter: [{ terms: { space_id: spaceIds } }],
+                filter: [{ term: { space_id } }],
                 should: [
                   {
                     rank_feature: {
@@ -378,32 +362,6 @@ export class OpenSearchClient implements SearchClient {
         bool: {
           must: [baseTextQuery],
           filter: [{ term: { space_id: spaceId } }],
-          should: [
-            {
-              rank_feature: {
-                field: "entity_space_score",
-                boost: 1.3,
-              },
-            },
-          ],
-        },
-      },
-    };
-  }
-
-  /**
-   * Build a multi-space filtered query.
-   * Filters by multiple space_ids and boosts by entity_space_score.
-   */
-  private buildMultiSpaceQuery(
-    baseTextQuery: object,
-    spaceIds: string[]
-  ): object {
-    return {
-      query: {
-        bool: {
-          must: [baseTextQuery],
-          filter: [{ terms: { space_id: spaceIds } }],
           should: [
             {
               rank_feature: {

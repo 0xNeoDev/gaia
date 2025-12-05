@@ -5,13 +5,13 @@
  */
 
 export type { SearchClient } from "./client";
-export { createSearchClient } from "./client";
 export { OpenSearchClient } from "./opensearch";
 export type {
   SearchQuery,
   SearchResponse,
   SearchResult,
   SearchScope,
-  EntityDocument,
+  SearchErrorType,
 } from "./types";
+export { SearchError, isSearchError } from "./types";
 

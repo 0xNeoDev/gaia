@@ -84,25 +84,51 @@
 
 pub mod events;
 pub mod generator;
+pub mod name_description;
 pub mod test_topology;
 
 // Re-export main types at crate root for convenience
 pub use events::{
-    // ID types
-    Address, EditId, EntityId, PropertyId, RelationId, RelationTypeId, SpaceId, TopicId,
-    // Block types
-    BlockMetadata, MockBlock, MockEvent,
-    // Space events
-    SpaceCreated, SpaceType,
-    // Trust events
-    TrustExtended, TrustExtension,
-    // Edit events
-    EditPublished, Op,
-    // Op types
-    CreateProperty, CreateRelation, DataType, UnsetEntityValues, UnsetRelationFields,
-    UpdateEntity, UpdateRelation, Value,
     // Helpers
-    make_address, make_id,
+    make_address,
+    make_id,
+    // ID types
+    Address,
+    // Block types
+    BlockMetadata,
+    // Op types
+    CreateProperty,
+    CreateRelation,
+    DataType,
+    EditId,
+    // Edit events
+    EditPublished,
+    EntityId,
+    MockBlock,
+    MockEvent,
+    Op,
+    PropertyId,
+    RelationId,
+    RelationTypeId,
+    // Space events
+    SpaceCreated,
+    SpaceId,
+    SpaceType,
+    TopicId,
+    // Trust events
+    TrustExtended,
+    TrustExtension,
+    UnsetEntityValues,
+    UnsetRelationFields,
+    UpdateEntity,
+    UpdateRelation,
+    Value,
 };
 
 pub use generator::{MockConfig, MockSubstream};
+pub use name_description::{
+    create_name_description_entity_op_deterministic, get_name_description_property_ids,
+};
+
+#[cfg(feature = "random")]
+pub use name_description::create_name_description_entity_op;

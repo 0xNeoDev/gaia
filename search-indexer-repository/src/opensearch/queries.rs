@@ -43,7 +43,7 @@ pub fn build_search_query(query: &SearchQuery) -> Value {
                 build_global_query(base_text_query)
             }
         }
-        SearchScope::SpaceAndAllSubspaces => {
+        SearchScope::Space => {
             if let Some(space_ids) = &query.space_ids {
                 if !space_ids.is_empty() {
                     build_multi_space_query(base_text_query, space_ids)
@@ -203,7 +203,7 @@ fn build_single_space_query(base_text_query: Value, space_id: Uuid) -> Value {
 
 /// Build a query to filter by multiple space IDs.
 ///
-/// Used for SpaceAndAllSubspaces scope when we have the list of subspace IDs.
+/// Used for Space scope when we have the list of subspace IDs.
 /// Boosts by `entity_space_score` using rank_feature.
 fn build_multi_space_query(base_text_query: Value, space_ids: &[Uuid]) -> Value {
     let space_id_strings: Vec<String> = space_ids.iter().map(|id| id.to_string()).collect();

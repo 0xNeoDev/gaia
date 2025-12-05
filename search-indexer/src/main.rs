@@ -12,7 +12,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 /// Initialize tracing/logging.
 fn init_tracing() -> Result<(), IndexingError> {
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("search_indexer=info,search_indexer_pipeline=info"));
+        .unwrap_or_else(|_| EnvFilter::new("search_indexer=info,search_indexer_ingest=info"));
 
     let axiom_token = env::var("AXIOM_TOKEN").ok();
 

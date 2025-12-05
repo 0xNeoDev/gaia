@@ -11,3 +11,8 @@ hex = "0.4"
 wire = { path = "../wire" }
 hermes-schema = { path = "../hermes-schema" }
 mock-substream = { path = "../mock-substream" }
+sdk = { path = "../sdk" }
+indexer_utils = { path = "../indexer_utils" }
+
+[build-dependencies]
+prost-build = "0.13.5"

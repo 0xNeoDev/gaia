@@ -5,6 +5,9 @@
 
 use crate::events::*;
 
+#[cfg(feature = "random")]
+use rand::Rng;
+
 /// Configuration for the mock substream generator.
 #[derive(Debug, Clone)]
 pub struct MockConfig {
@@ -134,7 +137,12 @@ impl MockSubstream {
     }
 
     /// Create a space creation event.
-    pub fn create_space(&mut self, space_id: SpaceId, topic_id: TopicId, space_type: SpaceType) -> SpaceCreated {
+    pub fn create_space(
+        &mut self,
+        space_id: SpaceId,
+        topic_id: TopicId,
+        space_type: SpaceType,
+    ) -> SpaceCreated {
         self.event_counter += 1;
         SpaceCreated {
             meta: self.current_metadata(),
@@ -145,7 +153,12 @@ impl MockSubstream {
     }
 
     /// Create a personal space creation event.
-    pub fn create_personal_space(&mut self, space_id: SpaceId, topic_id: TopicId, owner: Address) -> SpaceCreated {
+    pub fn create_personal_space(
+        &mut self,
+        space_id: SpaceId,
+        topic_id: TopicId,
+        owner: Address,
+    ) -> SpaceCreated {
         self.create_space(space_id, topic_id, SpaceType::Personal { owner })
     }
 
@@ -168,7 +181,11 @@ impl MockSubstream {
     }
 
     /// Create a trust extension event.
-    pub fn extend_trust(&mut self, source_space_id: SpaceId, extension: TrustExtension) -> TrustExtended {
+    pub fn extend_trust(
+        &mut self,
+        source_space_id: SpaceId,
+        extension: TrustExtension,
+    ) -> TrustExtended {
         self.event_counter += 1;
         TrustExtended {
             meta: self.current_metadata(),
@@ -179,17 +196,32 @@ impl MockSubstream {
 
     /// Create a verified trust extension.
     pub fn extend_verified(&mut self, source: SpaceId, target: SpaceId) -> TrustExtended {
-        self.extend_trust(source, TrustExtension::Verified { target_space_id: target })
+        self.extend_trust(
+            source,
+            TrustExtension::Verified {
+                target_space_id: target,
+            },
+        )
     }
 
     /// Create a related trust extension.
     pub fn extend_related(&mut self, source: SpaceId, target: SpaceId) -> TrustExtended {
-        self.extend_trust(source, TrustExtension::Related { target_space_id: target })
+        self.extend_trust(
+            source,
+            TrustExtension::Related {
+                target_space_id: target,
+            },
+        )
     }
 
     /// Create a subtopic trust extension.
     pub fn extend_subtopic(&mut self, source: SpaceId, target_topic: TopicId) -> TrustExtended {
-        self.extend_trust(source, TrustExtension::Subtopic { target_topic_id: target_topic })
+        self.extend_trust(
+            source,
+            TrustExtension::Subtopic {
+                target_topic_id: target_topic,
+            },
+        )
     }
 
     /// Create an edit published event.
@@ -276,8 +308,12 @@ mod random_impl {
                     let num_editors = rng.gen_range(1..=5);
                     let num_members = rng.gen_range(3..=10);
                     SpaceType::Dao {
-                        initial_editors: (0..num_editors).map(|_| Self::random_space_id(rng)).collect(),
-                        initial_members: (0..num_members).map(|_| Self::random_space_id(rng)).collect(),
+                        initial_editors: (0..num_editors)
+                            .map(|_| Self::random_space_id(rng))
+                            .collect(),
+                        initial_members: (0..num_members)
+                            .map(|_| Self::random_space_id(rng))
+                            .collect(),
                     }
                 };
 
@@ -352,9 +388,9 @@ mod random_impl {
             let mut entities: Vec<EntityId> = Vec::new();
 
             for _ in 0..num_ops {
-                let op = match rng.gen_range(0..3) {
+                let op = match rng.gen_range(0..4) {
                     0 => {
-                        // UpdateEntity
+                        // UpdateEntity with random property
                         let entity_id = Self::random_id(rng);
                         entities.push(entity_id);
                         Op::UpdateEntity(UpdateEntity {
@@ -366,6 +402,12 @@ mod random_impl {
                         })
                     }
                     1 => {
+                        // UpdateEntity with name/description (using SDK constants)
+                        let entity_id = Self::random_id(rng);
+                        entities.push(entity_id);
+                        crate::name_description::create_name_description_entity_op(rng)
+                    }
+                    2 => {
                         // CreateProperty
                         Op::CreateProperty(CreateProperty {
                             id: Self::random_id(rng),
