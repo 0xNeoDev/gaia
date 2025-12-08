@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hermes-processor
+  namespace: kafka
+spec:
+  template:
+    metadata:
+      labels:
+        app: hermes-processor
+    spec:
+      restartPolicy: OnFailure
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: hermes-processor
+          image: registry.digitalocean.com/geo/hermes-processor:latest
+          imagePullPolicy: Always
+          env:
+            - name: KAFKA_BROKER
+              value: "kafka-broker-0.broker.kafka.svc.cluster.local:29092"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

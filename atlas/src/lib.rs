@@ -5,7 +5,7 @@
 //! - Group abstractions with dynamic resolution at query time
 //! - Trust model based on reachability from root
 
+pub mod convert;
 pub mod events;
 pub mod graph;
 pub mod kafka;
-pub mod mock_substream;

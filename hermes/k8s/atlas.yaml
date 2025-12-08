@@ -1,28 +1,30 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: hermes-producer
+  name: atlas
   namespace: kafka
 spec:
   template:
     metadata:
       labels:
-        app: hermes-producer
+        app: atlas
     spec:
       restartPolicy: OnFailure
       imagePullSecrets:
         - name: regcred
       containers:
-        - name: hermes-producer
-          image: registry.digitalocean.com/geo/hermes-producer:latest
+        - name: atlas
+          image: registry.digitalocean.com/geo/atlas:latest
           imagePullPolicy: Always
           env:
             - name: KAFKA_BROKER
               value: "kafka-broker-0.broker.kafka.svc.cluster.local:29092"
+            - name: KAFKA_TOPIC
+              value: "topology.canonical"
           resources:
             requests:
               memory: "256Mi"
               cpu: "250m"
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "1Gi"
+              cpu: "1000m"
