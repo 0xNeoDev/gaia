@@ -4,8 +4,29 @@
 
 use serde_json::{json, Value};
 
-/// The alias name for the search index (used for all operations).
-pub const INDEX_ALIAS: &str = "entities";
+/// Configuration for the search index.
+#[derive(Debug, Clone)]
+pub struct IndexConfig {
+    /// The alias name for the search index (used for all operations).
+    pub alias: String,
+    /// The version number for the index (e.g., 0 for "entities_v0").
+    pub version: u32,
+}
+
+impl IndexConfig {
+    /// Create a new index configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `alias` - The index alias name
+    /// * `version` - The version number
+    pub fn new(alias: impl Into<String>, version: u32) -> Self {
+        Self {
+            alias: alias.into(),
+            version,
+        }
+    }
+}
 
 /// The base name of the search index (without version).
 pub const INDEX_NAME: &str = "entities";
@@ -14,13 +35,13 @@ pub const INDEX_NAME: &str = "entities";
 ///
 /// # Arguments
 ///
-/// * `version` - The version number (defaults to 1 if None)
+/// * `version` - The version number (defaults to 0 if None)
 ///
 /// # Returns
 ///
-/// The versioned index name (e.g., "entities_v1")
+/// The versioned index name (e.g., "entities_v0")
 pub fn get_versioned_index_name(version: Option<u32>) -> String {
-    let v = version.unwrap_or(1);
+    let v = version.unwrap_or(0);
     format!("{}_v{}", INDEX_NAME, v)
 }
 
@@ -134,12 +155,12 @@ mod tests {
     #[test]
     fn test_index_name() {
         assert_eq!(INDEX_NAME, "entities");
-        assert_eq!(INDEX_ALIAS, "entities");
     }
 
     #[test]
     fn test_versioned_index_name() {
-        assert_eq!(get_versioned_index_name(None), "entities_v1");
+        assert_eq!(get_versioned_index_name(None), "entities_v0");
+        assert_eq!(get_versioned_index_name(Some(0)), "entities_v0");
         assert_eq!(get_versioned_index_name(Some(1)), "entities_v1");
         assert_eq!(get_versioned_index_name(Some(2)), "entities_v2");
         assert_eq!(get_versioned_index_name(Some(42)), "entities_v42");

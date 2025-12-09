@@ -14,6 +14,4 @@ configMapGenerator:
       disableNameSuffixHash: true
     files:
       - opensearch-overview.json=../grafana/dashboards/opensearch-overview-dashboard.json
-      - aws-opensearch.json=../grafana/dashboards/AWS_OpenSearch.json
-      - os-k8s.json=../grafana/dashboards/OS_k8s.json
 

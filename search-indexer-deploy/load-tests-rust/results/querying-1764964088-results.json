@@ -1,0 +1,34 @@
+{
+  "duration_seconds": 300.095620584,
+  "resource_config": {
+    "deployment_type": "local",
+    "opensearch_cpu_cores": 2.0,
+    "opensearch_jvm_heap_gb": 1.0,
+    "opensearch_memory_gb": 4.0
+  },
+  "results": {
+    "querying": {
+      "errors": {
+        "breakdown": {},
+        "rate_percent": 0.0,
+        "total": 0
+      },
+      "latency_ms": {
+        "max": 3237.0,
+        "mean": 27.405313016456898,
+        "min": 1.0,
+        "p50": 21.0,
+        "p90": 42.0,
+        "p95": 55.0,
+        "p99": 221.0,
+        "p99_9": 291.0
+      },
+      "throughput": {
+        "per_second": 1768.299713828922,
+        "total": 530659
+      }
+    }
+  },
+  "test_name": "querying-1764964088",
+  "timestamp": "2025-12-05T19:53:08.814524+00:00"
+}

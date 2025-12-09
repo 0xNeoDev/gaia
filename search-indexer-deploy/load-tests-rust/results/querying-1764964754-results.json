@@ -1,0 +1,39 @@
+{
+  "duration_seconds": 5.006380625,
+  "index_statistics": {
+    "average_doc_size_kb": 3.443621196203018,
+    "document_count": 34162,
+    "total_storage_gb": 0.11219118814915419
+  },
+  "resource_config": {
+    "deployment_type": "local",
+    "opensearch_cpu_cores": 2.0,
+    "opensearch_jvm_heap_gb": 1.0,
+    "opensearch_memory_gb": 4.0
+  },
+  "results": {
+    "querying": {
+      "errors": {
+        "breakdown": {},
+        "rate_percent": 0.0,
+        "total": 0
+      },
+      "latency_ms": {
+        "max": 398.0,
+        "mean": 7.816433566433567,
+        "min": 1.0,
+        "p50": 6.0,
+        "p90": 12.0,
+        "p95": 16.0,
+        "p99": 30.0,
+        "p99_9": 398.0
+      },
+      "throughput": {
+        "per_second": 114.25419736239091,
+        "total": 572
+      }
+    }
+  },
+  "test_name": "querying-1764964754",
+  "timestamp": "2025-12-05T19:59:19.371938+00:00"
+}

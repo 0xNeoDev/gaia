@@ -1,0 +1,15 @@
+metric,value,unit
+duration,5.0,seconds
+index_document_count,34162,documents
+index_avg_doc_size,3.44,kB
+index_total_storage,0.112,GB
+querying_total,572,queries
+querying_rate,114.3,queries_per_second
+querying_latency_mean,7.8,ms
+querying_latency_p50,6.0,ms
+querying_latency_p90,12.0,ms
+querying_latency_p95,16.0,ms
+querying_latency_p99,30.0,ms
+querying_latency_p99_9,398.0,ms
+querying_errors_total,0,count
+querying_errors_rate,0.00,percent

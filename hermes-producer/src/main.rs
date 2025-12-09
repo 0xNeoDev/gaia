@@ -143,16 +143,12 @@ fn create_subtopic_trust_extension(
 /// Returns (name_bytes, description_bytes) or falls back to random UUID bytes on error.
 fn get_name_description_property_bytes() -> (Vec<u8>, Vec<u8>) {
     let name_property_bytes = decode_base58_to_uuid(NAME_ATTRIBUTE)
-        .ok()
-        .and_then(|uuid_str| Uuid::parse_str(&uuid_str).ok())
         .map(|uuid| uuid.as_bytes().to_vec())
-        .unwrap_or_else(|| random_uuid_bytes());
+        .unwrap_or_else(|_| random_uuid_bytes());
 
     let description_property_bytes = decode_base58_to_uuid(DESCRIPTION_ATTRIBUTE)
-        .ok()
-        .and_then(|uuid_str| Uuid::parse_str(&uuid_str).ok())
         .map(|uuid| uuid.as_bytes().to_vec())
-        .unwrap_or_else(|| random_uuid_bytes());
+        .unwrap_or_else(|_| random_uuid_bytes());
 
     (name_property_bytes, description_property_bytes)
 }

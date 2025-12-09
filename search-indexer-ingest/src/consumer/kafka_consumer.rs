@@ -438,7 +438,7 @@ impl KafkaConsumer {
                 match payload {
                     Payload::UpdateEntity(entity) => {
                         if let Some(event) = self.process_update_entity(
-                            &entity,
+                            entity,
                             space_id,
                             block_number,
                             &cursor,
@@ -539,63 +539,21 @@ impl KafkaConsumer {
 
             if property_id == NAME_ATTRIBUTE {
                 name = Some(value.value.clone());
-                // Super obvious log for name attribute
-                eprintln!("\n\x1b[1;93m╔════════════════════════════════════════════════════════════════╗\x1b[0m");
-                eprintln!("\x1b[1;93m║\x1b[0m \x1b[1;96m🚨 NAME ATTRIBUTE DETECTED IN PROPERTY EDIT 🚨\x1b[0m \x1b[1;93m║\x1b[0m");
-                eprintln!("\x1b[1;93m╠════════════════════════════════════════════════════════════════╣\x1b[0m");
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Entity ID: \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    entity_id
-                );
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Space ID:  \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    space_id
-                );
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Name Value: \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    value.value
-                );
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Property ID: \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    property_id
-                );
-                eprintln!("\x1b[1;93m╚════════════════════════════════════════════════════════════════╝\x1b[0m\n");
                 info!(
                     entity_id = %entity_id,
                     space_id = %space_id,
                     property_id = %property_id,
                     name_value = %value.value,
-                    "🚨 NAME ATTRIBUTE DETECTED IN PROPERTY EDIT 🚨"
+                    "name attribute detected in property edit"
                 );
             } else if property_id == DESCRIPTION_ATTRIBUTE {
                 description = Some(value.value.clone());
-                // Super obvious log for description attribute
-                eprintln!("\n\x1b[1;93m╔════════════════════════════════════════════════════════════════╗\x1b[0m");
-                eprintln!("\x1b[1;93m║\x1b[0m \x1b[1;96m🚨 DESCRIPTION ATTRIBUTE DETECTED IN PROPERTY EDIT 🚨\x1b[0m \x1b[1;93m║\x1b[0m");
-                eprintln!("\x1b[1;93m╠════════════════════════════════════════════════════════════════╣\x1b[0m");
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Entity ID:    \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    entity_id
-                );
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Space ID:     \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    space_id
-                );
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Description:  \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    value.value
-                );
-                eprintln!(
-                    "\x1b[1;93m║\x1b[0m Property ID:  \x1b[1;92m{}\x1b[0m \x1b[1;93m║\x1b[0m",
-                    property_id
-                );
-                eprintln!("\x1b[1;93m╚════════════════════════════════════════════════════════════════╝\x1b[0m\n");
                 info!(
                     entity_id = %entity_id,
                     space_id = %space_id,
                     property_id = %property_id,
                     description_value = %value.value,
-                    "🚨 DESCRIPTION ATTRIBUTE DETECTED IN PROPERTY EDIT 🚨"
+                    "description attribute detected in property edit"
                 );
             }
         }

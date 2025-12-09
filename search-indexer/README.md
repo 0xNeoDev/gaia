@@ -30,6 +30,8 @@ Environment variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `OPENSEARCH_URL` | OpenSearch server URL | `http://localhost:9200` |
+| `INDEX_ALIAS` | Index alias name | `entities` |
+| `ENTITIES_INDEX_VERSION` | Index version number | `0` |
 | `KAFKA_BROKER` | Kafka broker address | `localhost:9092` |
 | `KAFKA_GROUP_ID` | Consumer group ID | `search-indexer` |
 | `OPENSEARCH_CONNECTION_MODE` | Connection mode: `fail-fast` or `retry` | `retry` |

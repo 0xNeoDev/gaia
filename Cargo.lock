@@ -2862,6 +2862,7 @@ dependencies = [
 name = "indexer_utils"
 version = "0.1.0"
 dependencies = [
+ "bs58",
  "md-5",
  "sha3",
  "uuid",
