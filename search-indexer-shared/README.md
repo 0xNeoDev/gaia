@@ -28,7 +28,7 @@ let doc = EntityDocument::new(
 let query = SearchQuery {
     query: "search term".to_string(),
     scope: SearchScope::Global,
-    space_id: None,
+    space_ids: None,
     limit: 20,
     offset: 0,
 };

@@ -1,0 +1,31 @@
+================================================================================
+LOAD TEST RESULTS: QUERYING-1764964088
+================================================================================
+
+Test Configuration:
+  Duration: 300.1 seconds
+  Timestamp: 2025-12-05T19:53:08.814524+00:00
+  Deployment: local
+  OpenSearch Memory: 4GB
+  OpenSearch CPU: 2 cores
+  OpenSearch JVM Heap: 1GB
+
+Querying Performance:
+  Total queries: 530659
+  Rate: 1768.3 queries/sec
+  Latency (ms):
+    Mean:   27.4
+    P50:    21.0
+    P90:    42.0
+    P95:    55.0
+    P99:    221.0
+    P99.9:  291.0
+    Min:    1.0
+    Max:    3237.0
+  Errors: 0 (0.00%)
+
+Summary:
+  Total Queries Executed: 530659
+  Average Rate: 1768.3 queries/sec
+
+================================================================================

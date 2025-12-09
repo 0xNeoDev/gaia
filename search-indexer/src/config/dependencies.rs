@@ -11,7 +11,7 @@ use search_indexer_ingest::{
     consumer::KafkaConsumer, loader::SearchLoader, orchestrator::Orchestrator,
     processor::EntityProcessor,
 };
-use search_indexer_repository::{OpenSearchClient, SearchEngineClient};
+use search_indexer_repository::{opensearch::IndexConfig, OpenSearchClient, SearchEngineClient};
 
 /// Default OpenSearch URL.
 const DEFAULT_OPENSEARCH_URL: &str = "http://localhost:9200";
@@ -67,6 +67,8 @@ impl Dependencies {
     /// # Environment Variables
     ///
     /// - `OPENSEARCH_URL`: OpenSearch server URL (default: http://localhost:9200)
+    /// - `INDEX_ALIAS`: Index alias name (default: "entities")
+    /// - `ENTITIES_INDEX_VERSION`: Index version number (default: 0)
     /// - `KAFKA_BROKER`: Kafka broker address (default: localhost:9092)
     /// - `KAFKA_GROUP_ID`: Consumer group ID (default: search-indexer)
     /// - `OPENSEARCH_CONNECTION_MODE`: Connection mode - "fail-fast" or "retry" (default: retry)
@@ -98,9 +100,18 @@ impl Dependencies {
             "Initializing dependencies"
         );
 
+        // Get index configuration from environment variables or use defaults
+        let index_alias = env::var("INDEX_ALIAS").unwrap_or_else(|_| "entities".to_string());
+        let index_version = env::var("ENTITIES_INDEX_VERSION")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0);
+        let index_config = IndexConfig::new(index_alias, index_version);
+
         // Initialize OpenSearch client with retry logic
         let search_client = Self::connect_to_opensearch(
             &opensearch_url,
+            index_config,
             connection_mode,
             Duration::from_secs(retry_interval),
         )
@@ -130,11 +141,12 @@ impl Dependencies {
     /// Connect to OpenSearch with retry logic based on connection mode.
     async fn connect_to_opensearch(
         url: &str,
+        index_config: IndexConfig,
         mode: ConnectionMode,
         retry_interval: Duration,
     ) -> Result<OpenSearchClient, IndexingError> {
         loop {
-            match Self::try_connect_opensearch(url).await {
+            match Self::try_connect_opensearch(url, index_config.clone()).await {
                 Ok(client) => return Ok(client),
                 Err(e) => match mode {
                     ConnectionMode::FailFast => {
@@ -158,11 +170,16 @@ impl Dependencies {
     }
 
     /// Attempt to connect to OpenSearch and verify health.
-    async fn try_connect_opensearch(url: &str) -> Result<OpenSearchClient, IndexingError> {
+    async fn try_connect_opensearch(
+        url: &str,
+        index_config: IndexConfig,
+    ) -> Result<OpenSearchClient, IndexingError> {
         // Initialize OpenSearch client
-        let search_client = OpenSearchClient::new(url).await.map_err(|e| {
-            IndexingError::config(format!("Failed to create OpenSearch client: {}", e))
-        })?;
+        let search_client = OpenSearchClient::new(url, index_config)
+            .await
+            .map_err(|e| {
+                IndexingError::config(format!("Failed to create OpenSearch client: {}", e))
+            })?;
 
         // Verify OpenSearch is reachable
         let healthy = search_client

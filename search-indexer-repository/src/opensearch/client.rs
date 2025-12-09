@@ -20,7 +20,7 @@ use uuid::Uuid;
 use crate::errors::{SearchError, SearchIndexError};
 use crate::interfaces::UpdateEntityRequest as OldUpdateEntityRequest;
 use crate::interfaces::{SearchEngineClient, SearchIndexProvider};
-use crate::opensearch::index_config::{get_index_settings, INDEX_NAME};
+use crate::opensearch::index_config::{get_index_settings, get_versioned_index_name, IndexConfig};
 use crate::opensearch::queries::build_search_query;
 use crate::types::{
     BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest,
@@ -34,7 +34,9 @@ use search_indexer_shared::{EntityDocument, SearchQuery, SearchResponse, SearchR
 /// # Example
 ///
 /// ```ignore
-/// let client = OpenSearchClient::new("http://localhost:9200").await?;
+/// use search_indexer_repository::opensearch::IndexConfig;
+/// let config = IndexConfig::new("entities", 0);
+/// let client = OpenSearchClient::new("http://localhost:9200", config).await?;
 /// client.ensure_index_exists().await?;
 ///
 /// let doc = EntityDocument::new(
@@ -47,7 +49,7 @@ use search_indexer_shared::{EntityDocument, SearchQuery, SearchResponse, SearchR
 /// ```
 pub struct OpenSearchClient {
     client: OpenSearch,
-    index_name: String,
+    index_config: IndexConfig,
 }
 
 impl OpenSearchClient {
@@ -56,12 +58,13 @@ impl OpenSearchClient {
     /// # Arguments
     ///
     /// * `url` - The OpenSearch server URL (e.g., "http://localhost:9200")
+    /// * `index_config` - The index configuration containing alias and version
     ///
     /// # Returns
     ///
     /// * `Ok(OpenSearchClient)` - A new client instance
     /// * `Err(SearchError)` - If connection setup fails
-    pub async fn new(url: &str) -> Result<Self, SearchError> {
+    pub async fn new(url: &str, index_config: IndexConfig) -> Result<Self, SearchError> {
         let parsed_url =
             Url::parse(url).map_err(|e| SearchError::ConnectionError(e.to_string()))?;
 
@@ -73,26 +76,17 @@ impl OpenSearchClient {
 
         let client = OpenSearch::new(transport);
 
-        info!(url = %url, "Created OpenSearch client");
+        info!(
+            url = %url,
+            alias = %index_config.alias,
+            version = index_config.version,
+            "Created OpenSearch client"
+        );
 
         Ok(Self {
             client,
-            index_name: INDEX_NAME.to_string(),
+            index_config,
         })
-    }
-
-    /// Create a client with a custom index name.
-    ///
-    /// Useful for testing or multi-tenant scenarios.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - The OpenSearch server URL
-    /// * `index_name` - Custom index name to use
-    pub async fn with_index_name(url: &str, index_name: &str) -> Result<Self, SearchError> {
-        let mut client = Self::new(url).await?;
-        client.index_name = index_name.to_string();
-        Ok(client)
     }
 
     /// Generate a document ID from entity and space IDs.
@@ -127,7 +121,7 @@ impl SearchEngineClient for OpenSearchClient {
     #[instrument(skip(self), fields(query = %query.query, scope = ?query.scope))]
     async fn search(&self, query: &SearchQuery) -> Result<SearchResponse, SearchError> {
         // Validate query
-        query.validate().map_err(|e| SearchError::InvalidQuery(e))?;
+        query.validate().map_err(SearchError::InvalidQuery)?;
 
         let search_body = build_search_query(query);
 
@@ -135,7 +129,7 @@ impl SearchEngineClient for OpenSearchClient {
 
         let response = self
             .client
-            .search(SearchParts::Index(&[&self.index_name]))
+            .search(SearchParts::Index(&[&self.index_config.alias]))
             .from(query.offset as i64)
             .size(query.limit as i64)
             .body(search_body)
@@ -186,7 +180,7 @@ impl SearchEngineClient for OpenSearchClient {
 
         let response = self
             .client
-            .index(IndexParts::IndexId(&self.index_name, &doc_id))
+            .index(IndexParts::IndexId(&self.index_config.alias, &doc_id))
             .body(document)
             .send()
             .await
@@ -226,7 +220,7 @@ impl SearchEngineClient for OpenSearchClient {
 
         let response = self
             .client
-            .bulk(BulkParts::Index(&self.index_name))
+            .bulk(BulkParts::Index(&self.index_config.alias))
             .body(body)
             .send()
             .await
@@ -290,7 +284,7 @@ impl SearchEngineClient for OpenSearchClient {
 
         let response = self
             .client
-            .update(UpdateParts::IndexId(&self.index_name, &doc_id))
+            .update(UpdateParts::IndexId(&self.index_config.alias, &doc_id))
             .body(json!({"doc": doc}))
             .send()
             .await
@@ -322,7 +316,7 @@ impl SearchEngineClient for OpenSearchClient {
 
         let response = self
             .client
-            .delete(DeleteParts::IndexId(&self.index_name, &doc_id))
+            .delete(DeleteParts::IndexId(&self.index_config.alias, &doc_id))
             .send()
             .await
             .map_err(|e| SearchError::DeleteError(e.to_string()))?;
@@ -345,43 +339,161 @@ impl SearchEngineClient for OpenSearchClient {
 
     #[instrument(skip(self))]
     async fn ensure_index_exists(&self) -> Result<(), SearchError> {
-        let exists_response = self
+        // Get the versioned index name (e.g., "entities_v0")
+        let versioned_index_name = get_versioned_index_name(Some(self.index_config.version));
+
+        // Step 1: Ensure the versioned index exists
+        let index_exists_response = self
             .client
             .indices()
-            .exists(IndicesExistsParts::Index(&[&self.index_name]))
+            .exists(IndicesExistsParts::Index(&[&versioned_index_name]))
             .send()
             .await
             .map_err(|e| SearchError::ConnectionError(e.to_string()))?;
 
-        if exists_response.status_code().is_success() {
-            debug!(index = %self.index_name, "Index already exists");
-            return Ok(());
+        if !index_exists_response.status_code().is_success() {
+            info!(index = %versioned_index_name, "Creating versioned index");
+
+            let settings = get_index_settings(Some(self.index_config.version));
+
+            let create_response = self
+                .client
+                .indices()
+                .create(IndicesCreateParts::Index(&versioned_index_name))
+                .body(settings)
+                .send()
+                .await
+                .map_err(|e| SearchError::IndexCreationError(e.to_string()))?;
+
+            let status = create_response.status_code();
+            if !status.is_success() {
+                let error_body = create_response.text().await.unwrap_or_default();
+                error!(status = %status, body = %error_body, "Index creation failed");
+                return Err(SearchError::IndexCreationError(format!(
+                    "Index creation failed with status {}: {}",
+                    status, error_body
+                )));
+            }
+
+            info!(index = %versioned_index_name, "Versioned index created successfully");
+        } else {
+            debug!(index = %versioned_index_name, "Versioned index already exists");
         }
 
-        info!(index = %self.index_name, "Creating index");
-
-        let settings = get_index_settings(None);
-
-        let create_response = self
+        // Step 2: Check if alias exists and create/update it
+        // Use get_alias to check if alias exists and what it points to
+        let get_alias_response = self
             .client
             .indices()
-            .create(IndicesCreateParts::Index(&self.index_name))
-            .body(settings)
+            .get_alias(opensearch::indices::IndicesGetAliasParts::Name(&[&self
+                .index_config
+                .alias]))
             .send()
-            .await
-            .map_err(|e| SearchError::IndexCreationError(e.to_string()))?;
+            .await;
 
-        let status = create_response.status_code();
-        if !status.is_success() {
-            let error_body = create_response.text().await.unwrap_or_default();
-            error!(status = %status, body = %error_body, "Index creation failed");
-            return Err(SearchError::IndexCreationError(format!(
-                "Index creation failed with status {}: {}",
-                status, error_body
-            )));
+        let alias_exists = get_alias_response.is_ok()
+            && get_alias_response
+                .as_ref()
+                .unwrap()
+                .status_code()
+                .is_success();
+
+        if !alias_exists {
+            // Alias doesn't exist, create it
+            info!(alias = %self.index_config.alias, index = %versioned_index_name, "Creating alias");
+
+            let actions = json!({
+                "actions": [
+                    {
+                        "add": {
+                            "index": versioned_index_name,
+                            "alias": self.index_config.alias
+                        }
+                    }
+                ]
+            });
+
+            let update_response = self
+                .client
+                .indices()
+                .update_aliases()
+                .body(actions)
+                .send()
+                .await
+                .map_err(|e| SearchError::IndexCreationError(e.to_string()))?;
+
+            let status = update_response.status_code();
+            if !status.is_success() {
+                let error_body = update_response.text().await.unwrap_or_default();
+                error!(status = %status, body = %error_body, "Alias creation failed");
+                return Err(SearchError::IndexCreationError(format!(
+                    "Alias creation failed with status {}: {}",
+                    status, error_body
+                )));
+            }
+
+            info!(alias = %self.index_config.alias, index = %versioned_index_name, "Alias created successfully");
+        } else {
+            // Alias exists, check if it points to the correct index
+            let alias_body: Value = get_alias_response
+                .unwrap()
+                .json()
+                .await
+                .map_err(|e| SearchError::ParseError(e.to_string()))?;
+
+            // Check if alias points to the versioned index
+            let points_to_correct_index = alias_body
+                .as_object()
+                .and_then(|obj| obj.get(&versioned_index_name))
+                .is_some();
+
+            if !points_to_correct_index {
+                // Update alias to point to the correct index
+                // First, remove alias from all indices it currently points to
+                let mut actions = Vec::new();
+                if let Some(indices) = alias_body.as_object() {
+                    for index_name in indices.keys() {
+                        actions.push(json!({
+                            "remove": {
+                                "index": index_name,
+                                "alias": self.index_config.alias
+                            }
+                        }));
+                    }
+                }
+                // Then add alias to the correct index
+                actions.push(json!({
+                    "add": {
+                        "index": versioned_index_name,
+                        "alias": self.index_config.alias
+                    }
+                }));
+
+                let update_response = self
+                    .client
+                    .indices()
+                    .update_aliases()
+                    .body(json!({ "actions": actions }))
+                    .send()
+                    .await
+                    .map_err(|e| SearchError::IndexCreationError(e.to_string()))?;
+
+                let status = update_response.status_code();
+                if !status.is_success() {
+                    let error_body = update_response.text().await.unwrap_or_default();
+                    error!(status = %status, body = %error_body, "Alias update failed");
+                    return Err(SearchError::IndexCreationError(format!(
+                        "Alias update failed with status {}: {}",
+                        status, error_body
+                    )));
+                }
+
+                info!(alias = %self.index_config.alias, index = %versioned_index_name, "Alias updated successfully");
+            } else {
+                debug!(alias = %self.index_config.alias, index = %versioned_index_name, "Alias already points to correct index");
+            }
         }
 
-        info!(index = %self.index_name, "Index created successfully");
         Ok(())
     }
 

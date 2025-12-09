@@ -1,3 +1,7 @@
+# =============================================================================
+# Search Indexer Deployment
+# =============================================================================
+# Consumes messages from Kafka and indexes them into OpenSearch
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,22 +19,42 @@ spec:
       labels:
         app: search-indexer
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: search-indexer
           image: geo/search-indexer:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
-            # OpenSearch connection
+            # OpenSearch connection (same namespace, use simple service name)
             - name: OPENSEARCH_URL
-              value: "http://opensearch.search.svc.cluster.local:9200"
-            # Kafka connection (assuming Kafka is in kafka namespace)
+              value: "http://opensearch:9200"
+            # OpenSearch connection mode and retry settings
+            - name: OPENSEARCH_CONNECTION_MODE
+              value: "retry"
+            - name: OPENSEARCH_RETRY_INTERVAL_SECS
+              value: "15"
+            # Index alias (defaults to "entities" if not set)
+            - name: INDEX_ALIAS
+              value: "entities"
+            # Index version (defaults to 0 if not set)
+            - name: ENTITIES_INDEX_VERSION
+              value: "0"
+            # Kafka connection (Kafka is in kafka namespace)
             - name: KAFKA_BROKER
               value: "kafka-broker-0.broker.kafka.svc.cluster.local:29092"
             - name: KAFKA_GROUP_ID
               value: "search-indexer"
             # Logging
             - name: RUST_LOG
-              value: "search_indexer=info,search_indexer_ingest=info"
+              value: "info"
             # Optional: Axiom for centralized logging
             - name: AXIOM_TOKEN
               valueFrom:
@@ -42,12 +66,13 @@ spec:
               value: "gaia.search-indexer"
           resources:
             requests:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "100m"
             limits:
-              memory: "512Mi"
+              memory: "768Mi"
               cpu: "500m"
-          # Health check - indexer logs to stdout, so we check if process is running
+          # Health check - indexer logs to stdout regularly, so we check if process is running
+          # For automatic restart
           livenessProbe:
             exec:
               command:
@@ -56,6 +81,19 @@ spec:
                 - "ps aux | grep search-indexer | grep -v grep"
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # For readiness check before traffic is routed to the pod
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "ps aux | grep search-indexer | grep -v grep"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
       restartPolicy: Always
 ---
 # Optional: Secret for sensitive configuration

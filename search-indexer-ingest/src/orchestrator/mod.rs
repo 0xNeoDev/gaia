@@ -97,18 +97,23 @@ impl Orchestrator {
         // Subscribe to Kafka topics
         self.consumer.subscribe()?;
 
-        // Create message channel (consumer -> orchestrator)
-        let (tx, mut rx) = mpsc::channel::<StreamMessage>(self.config.channel_buffer_size);
-        
+        // Create event channel (consumer -> orchestrator)
+        let (event_transmitter, mut event_receiver) =
+            mpsc::channel::<StreamMessage>(self.config.channel_buffer_size);
+
         // Create acknowledgment channel (orchestrator -> consumer)
-        let (ack_tx, ack_rx) = mpsc::channel::<StreamMessage>(self.config.channel_buffer_size);
+        let (ack_transmitter, ack_receiver) =
+            mpsc::channel::<StreamMessage>(self.config.channel_buffer_size);
 
         // Start consumer in background
         let consumer = self.consumer.clone();
         let shutdown_rx = self.shutdown_tx.subscribe();
 
         let consumer_handle = tokio::spawn(async move {
-            if let Err(e) = consumer.run(tx, ack_rx, shutdown_rx).await {
+            if let Err(e) = consumer
+                .run(event_transmitter, ack_receiver, shutdown_rx)
+                .await
+            {
                 error!(error = %e, "Consumer error");
             }
         });
@@ -129,7 +134,7 @@ impl Orchestrator {
 
         loop {
             tokio::select! {
-                msg = rx.recv() => {
+                msg = event_receiver.recv() => {
                     match msg {
                         Some(StreamMessage::Events { events, offsets }) => {
                             info!(
@@ -140,7 +145,7 @@ impl Orchestrator {
                             match self.process_events(events).await {
                                 Ok(()) => {
                                     // Send success acknowledgment
-                                    let _ = ack_tx.send(StreamMessage::Acknowledgment {
+                                    let _ = ack_transmitter.send(StreamMessage::Acknowledgment {
                                         offsets,
                                         success: true,
                                         error: None,
@@ -149,7 +154,7 @@ impl Orchestrator {
                                 Err(e) => {
                                     error!(error = %e, "Failed to process events. Sending NACK to broker");
                                     // Send failure acknowledgment
-                                    let _ = ack_tx.send(StreamMessage::Acknowledgment {
+                                    let _ = ack_transmitter.send(StreamMessage::Acknowledgment {
                                         offsets,
                                         success: false,
                                         error: Some(e.to_string()),

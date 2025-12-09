@@ -2955,6 +2955,7 @@ dependencies = [
 name = "indexer_utils"
 version = "0.1.0"
 dependencies = [
+ "bs58",
  "md-5",
  "sha3",
  "uuid",
@@ -3307,10 +3308,9 @@ dependencies = [
 name = "mock-substream"
 version = "0.1.0"
 dependencies = [
- "bs58",
+ "indexer_utils",
  "rand 0.8.5",
  "sdk",
- "uuid",
 ]
 
 [[package]]

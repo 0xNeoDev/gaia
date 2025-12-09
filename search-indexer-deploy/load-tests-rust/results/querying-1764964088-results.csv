@@ -1,0 +1,12 @@
+metric,value,unit
+duration,300.1,seconds
+querying_total,530659,queries
+querying_rate,1768.3,queries_per_second
+querying_latency_mean,27.4,ms
+querying_latency_p50,21.0,ms
+querying_latency_p90,42.0,ms
+querying_latency_p95,55.0,ms
+querying_latency_p99,221.0,ms
+querying_latency_p99_9,291.0,ms
+querying_errors_total,0,count
+querying_errors_rate,0.00,percent

@@ -47,24 +47,26 @@ Coordinates the ingest components:
 ## Usage
 
 ```rust
+use std::sync::Arc;
 use search_indexer_ingest::{
     consumer::KafkaConsumer,
     processor::EntityProcessor,
     loader::SearchLoader,
     orchestrator::Orchestrator,
 };
-use search_indexer_repository::OpenSearchClient;
+use search_indexer_repository::{opensearch::IndexConfig, OpenSearchClient, SearchEngineClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create components
     let consumer = KafkaConsumer::new("localhost:9092", "search-indexer-group")?;
     let processor = EntityProcessor::new();
-    let search_client = OpenSearchClient::new("http://localhost:9200").await?;
-    let loader = SearchLoader::new(Box::new(search_client));
+    let index_config = IndexConfig::new("entities", 0);
+    let search_client = OpenSearchClient::new("http://localhost:9200", index_config).await?;
+    let loader = SearchLoader::new(Arc::new(search_client));
     
     // Create and run orchestrator
-    let orchestrator = Orchestrator::new(consumer, processor, loader);
+    let mut orchestrator = Orchestrator::new(consumer, processor, loader);
     orchestrator.run().await?;
     
     Ok(())

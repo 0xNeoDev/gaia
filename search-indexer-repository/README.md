@@ -47,7 +47,9 @@ use search_indexer_shared::{EntityDocument, SearchQuery};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create client
-    let client = OpenSearchClient::new("http://localhost:9200").await?;
+    use search_indexer_repository::opensearch::IndexConfig;
+    let config = IndexConfig::new("entities", 0);
+    let client = OpenSearchClient::new("http://localhost:9200", config).await?;
     
     // Ensure index exists
     client.ensure_index_exists().await?;
@@ -56,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let doc = EntityDocument::new(
         uuid::Uuid::new_v4(),
         uuid::Uuid::new_v4(),
-        "My Entity".to_string(),
+        Some("My Entity".to_string()),
         Some("Description".to_string()),
     );
     client.index_document(&doc).await?;
@@ -74,10 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 The OpenSearch index is configured with:
 
-- **Autocomplete analyzer**: Edge n-gram tokenizer for search-as-you-type
-- **Fuzzy matching**: Allows for typo tolerance
-- **Custom field boosting**: Name field boosted 2x over description
-- **Rank feature for scores**: Future support for score-based ranking
+- **search_as_you_type fields**: Built-in field type for autocomplete on name and description (uses n-grams internally)
+- **Fuzzy matching**: Allows for typo tolerance with AUTO fuzziness
+- **Custom field boosting**: Name field boosted higher than description (via multi-match and match_phrase_prefix queries)
+- **rank_feature fields**: Score fields (entity_global_score, space_score, entity_space_score) optimized for relevance boosting
 
 ## Error Handling
 
@@ -85,8 +87,13 @@ All operations return `Result<T, SearchError>` with specific error types:
 
 - `ConnectionError`: Failed to connect to OpenSearch
 - `QueryError`: Search query execution failed
+- `InvalidQuery`: The provided query is invalid
 - `IndexError`: Document indexing failed
 - `BulkIndexError`: Bulk operation partially failed
 - `UpdateError`: Document update failed
 - `DeleteError`: Document deletion failed
+- `IndexCreationError`: Failed to create the search index
+- `ParseError`: Failed to parse response from search engine
+- `SerializationError`: Failed to serialize data for the search engine
+- `NotFound`: Document not found
 

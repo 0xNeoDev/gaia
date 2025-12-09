@@ -8,4 +8,4 @@ mod index_config;
 mod queries;
 
 pub use client::OpenSearchClient;
-pub use index_config::INDEX_NAME;
+pub use index_config::IndexConfig;

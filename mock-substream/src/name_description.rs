@@ -4,8 +4,8 @@
 //! name and description values using the SDK's well-known attribute IDs.
 
 use crate::events::{EntityId, Op, PropertyId, UpdateEntity, Value};
+use indexer_utils::id::decode_base58_to_uuid;
 use sdk::core::ids::{DESCRIPTION_ATTRIBUTE, NAME_ATTRIBUTE};
-use uuid::Uuid;
 
 #[cfg(feature = "random")]
 use rand::Rng;
@@ -16,12 +16,14 @@ use crate::events::make_id;
 /// Returns (name_property_id, description_property_id) as 16-byte arrays.
 /// Falls back to well-known test IDs if decoding fails.
 pub fn get_name_description_property_ids() -> (PropertyId, PropertyId) {
-    // Decode base58 strings to UUID bytes
-    let name_property_id =
-        decode_base58_to_property_id(NAME_ATTRIBUTE).unwrap_or_else(|| make_id(0xD1)); // Fallback to PROPERTY_NAME from test_topology
+    // Decode base58 strings to UUID, then extract bytes
+    let name_property_id = decode_base58_to_uuid(NAME_ATTRIBUTE)
+        .map(|uuid| *uuid.as_bytes())
+        .unwrap_or_else(|_| make_id(0xD1)); // Fallback to PROPERTY_NAME from test_topology
 
-    let description_property_id =
-        decode_base58_to_property_id(DESCRIPTION_ATTRIBUTE).unwrap_or_else(|| make_id(0xD2)); // Fallback to PROPERTY_DESCRIPTION from test_topology
+    let description_property_id = decode_base58_to_uuid(DESCRIPTION_ATTRIBUTE)
+        .map(|uuid| *uuid.as_bytes())
+        .unwrap_or_else(|_| make_id(0xD2)); // Fallback to PROPERTY_DESCRIPTION from test_topology
 
     (name_property_id, description_property_id)
 }
@@ -88,27 +90,4 @@ pub fn create_name_description_entity_op_deterministic(
         id: entity_id,
         values,
     })
-}
-
-/// Decode a base58-encoded string to a PropertyId (16-byte UUID).
-/// Returns None if decoding fails or the decoded bytes are not 16 bytes.
-///
-/// The base58 strings in the SDK constants are base58-encoded UUID bytes.
-/// Decoding should yield exactly 16 bytes which can be used directly as a PropertyId.
-fn decode_base58_to_property_id(base58_str: &str) -> Option<PropertyId> {
-    // Decode base58 to bytes
-    let decoded_bytes = bs58::decode(base58_str).into_vec().ok()?;
-
-    // The decoded bytes should be exactly 16 bytes (UUID size)
-    if decoded_bytes.len() == 16 {
-        // Direct UUID bytes - convert to array
-        decoded_bytes.try_into().ok()
-    } else {
-        // If not exactly 16 bytes, try to parse as UUID string representation
-        // (some encodings might store UUID as string)
-        String::from_utf8(decoded_bytes)
-            .ok()
-            .and_then(|s| Uuid::parse_str(&s).ok())
-            .map(|uuid| *uuid.as_bytes())
-    }
 }
