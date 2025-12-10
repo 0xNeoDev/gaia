@@ -20,10 +20,8 @@ The crate uses a trait-based design for dependency injection, allowing:
 ```
 ┌─────────────────────────────────────┐
 │   SearchIndexProvider               │  (trait)
-│  - index_document()                 │
-│  - update_document()                │
+│  - update_document()                │  (upsert: create or update)
 │  - delete_document()                │
-│  - bulk_index_documents()           │
 │  - bulk_update_documents()          │
 │  - bulk_delete_documents()          │
 └─────────────────────────────────────┘
@@ -36,11 +34,17 @@ The crate uses a trait-based design for dependency injection, allowing:
 └─────────────────────────────────────┘
 ```
 
+## Note on Document Creation
+
+There is no separate `create` or `index_document` function because creates in grc-20 are just updates.
+The `update_document` function performs an upsert operation: it will create the document if it doesn't exist,
+or update it if it does exist.
+
 ## Usage
 
 ```rust
 use search_indexer_repository::{OpenSearchClient, SearchIndexProvider};
-use search_indexer_shared::EntityDocument;
+use search_indexer_repository::types::UpdateEntityRequest;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -49,14 +53,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = IndexConfig::new("entities", 0);
     let client = OpenSearchClient::new("http://localhost:9200", config).await?;
     
-    // Index a document
-    let doc = EntityDocument::new(
-        uuid::Uuid::new_v4(),
-        uuid::Uuid::new_v4(),
-        Some("My Entity".to_string()),
-        Some("Description".to_string()),
-    );
-    client.index_document(&doc).await?;
+    // Update a document (Creates it if it doesn't exist, updates it if it does)
+    let request = UpdateEntityRequest {
+        entity_id: uuid::Uuid::new_v4().to_string(),
+        space_id: uuid::Uuid::new_v4().to_string(),
+        name: Some("My Entity".to_string()),
+        description: Some("Description".to_string()),
+        ..Default::default()
+    };
+    // This will create the document if it doesn't exist, or update it if it does
+    client.update_document(&request).await?;
     
     Ok(())
 }
@@ -75,14 +81,12 @@ All operations return `Result<T, SearchIndexError>` with specific error types:
 
 - `ValidationError`: Input validation failed (e.g., invalid UUIDs)
 - `ConnectionError`: Failed to connect to OpenSearch
-- `IndexError`: Document indexing failed
-- `BulkIndexError`: Bulk operation partially failed
-- `UpdateError`: Document update failed
+- `UpdateError`: Document update/creation failed
 - `DeleteError`: Document deletion failed
 - `IndexCreationError`: Failed to create the search index
 - `ParseError`: Failed to parse response from search index backend
 - `SerializationError`: Failed to serialize data for the search index backend
-- `DocumentNotFound`: Document not found
+- `DocumentNotFound`: Document not found (note: `update_document` performs upsert, so this won't occur for updates)
 - `BatchSizeExceeded`: Batch size exceeds configured maximum
 - `Unknown`: Unknown error
 

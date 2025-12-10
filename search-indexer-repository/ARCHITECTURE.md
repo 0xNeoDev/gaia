@@ -10,32 +10,31 @@ sequenceDiagram
     participant OpenSearch as OpenSearchClient
     participant Backend as OpenSearch Cluster
 
-    App->>Client: create(CreateEntityRequest)
+    App->>Client: update(UpdateEntityRequest)
     Client->>Client: validate_uuid(entity_id)
     Client->>Client: validate_uuid(space_id)
-    Client->>Client: TryInto<EntityDocument>
-    Client->>Provider: index_document(document)
-    Provider->>OpenSearch: index_document(document)
-    OpenSearch->>Backend: HTTP via opensearch crate (/index/_doc/{id})
+    Client->>Provider: update_document(request)
+    Provider->>OpenSearch: update_document(request)
+    OpenSearch->>Backend: HTTP via opensearch crate (/index/_update/{id} with doc_as_upsert)
     Backend-->>OpenSearch: Response (200 OK)
     OpenSearch-->>Provider: Ok(())
     Provider-->>Client: Ok(())
     Client-->>App: Ok(())
 
     Note over App,Backend: Error Flow (Validation Error)
-    App->>Client: create(invalid_request)
+    App->>Client: update(invalid_request)
     Client->>Client: validate_uuid() fails
     Client-->>App: Err(SearchIndexError::ValidationError)
 
     Note over App,Backend: Error Flow (Backend Error)
-    App->>Client: create(request)
-    Client->>Provider: index_document(document)
-    Provider->>OpenSearch: index_document(document)
-    OpenSearch->>Backend: HTTP via opensearch crate (/index/_doc/{id})
+    App->>Client: update(request)
+    Client->>Provider: update_document(request)
+    Provider->>OpenSearch: update_document(request)
+    OpenSearch->>Backend: HTTP via opensearch crate (/index/_update/{id})
     Backend-->>OpenSearch: Response (500 Error)
-    OpenSearch-->>Provider: Err(SearchIndexError::IndexError)
-    Provider-->>Client: Err(SearchIndexError::IndexError)
-    Client-->>App: Err(SearchIndexError::IndexError)
+    OpenSearch-->>Provider: Err(SearchIndexError::UpdateError)
+    Provider-->>Client: Err(SearchIndexError::UpdateError)
+    Client-->>App: Err(SearchIndexError::UpdateError)
 ```
 
 ## Layered Overview
@@ -60,8 +59,8 @@ sequenceDiagram
 ┌─────────────────────────────────────────────────────────────────┐
 │                SearchIndexProvider (Trait)                      │
 │  - Abstract backend interface                                   │
-│  - Methods: index_document, update_document, delete_document    │
-│    + bulk_index_documents, bulk_update, bulk_delete             │
+│  - Methods: update_document (upsert), delete_document          │
+│    + bulk_update, bulk_delete                                  │
 │  - Returns SearchIndexError                                     │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -89,7 +88,7 @@ sequenceDiagram
 
 ### SearchIndexClient
 - **Input validation**: UUID format, required fields, batch size limits
-- **Request conversion**: CreateEntityRequest → EntityDocument
+- **Request handling**: UpdateEntityRequest (upsert: creates or updates)
 - **Error handling**: All errors are SearchIndexError
 - **Configuration**: Batch size limits, etc.
 
@@ -120,18 +119,18 @@ SearchIndexClient (passes through)
 Application Code (handles SearchIndexError)
 ```
 
-## Example Data Flow: Creating a Document
+## Example Data Flow: Updating/Creating a Document
 
 ```
-1. Application: create(CreateEntityRequest { entity_id: "123", ... })
+1. Application: update(UpdateEntityRequest { entity_id: "123", ... })
    ↓
-2. SearchIndexClient: Validates UUIDs, converts to EntityDocument
+2. SearchIndexClient: Validates UUIDs
    ↓
-3. SearchIndexProvider: index_document(&EntityDocument)
+3. SearchIndexProvider: update_document(&UpdateEntityRequest)
    ↓
-4. OpenSearchClient: Makes HTTP request to OpenSearch using opensearch crate
+4. OpenSearchClient: Makes HTTP update request with doc_as_upsert=true
    ↓
-5. OpenSearch: Stores document, returns 200 OK
+5. OpenSearch: Creates document if missing, updates if exists, returns 200 OK
    ↓
 6. Response flows back: Ok(()) → Application
 ```

@@ -7,7 +7,6 @@ use async_trait::async_trait;
 
 use crate::errors::SearchIndexError;
 use crate::types::{BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest};
-use search_indexer_shared::EntityDocument;
 
 /// Abstracts the underlying search index implementation (OpenSearch, Elasticsearch, etc.).
 ///
@@ -17,26 +16,20 @@ use search_indexer_shared::EntityDocument;
 ///
 /// All methods return `Result<T, SearchIndexError>` for consistent error handling across
 /// different backend implementations.
+///
+/// # Note on Document Creation
+///
+/// There is no separate `create_document` function because all grc-20 events are edits (updates).
+/// The `update_document` function performs an upsert operation: it will create the document if
+/// it doesn't exist, or update it if it does exist.
 #[async_trait]
 pub trait SearchIndexProvider: Send + Sync {
-    /// Index a single document in the search index.
+    /// Update specific fields of a document, creating it if it doesn't exist (upsert).
     ///
-    /// If a document with the same ID already exists, it will be replaced.
-    ///
-    /// # Arguments
-    ///
-    /// * `document` - The entity document to index
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the document was indexed successfully
-    /// * `Err(SearchIndexError)` - If indexing fails
-    async fn index_document(&self, document: &EntityDocument) -> Result<(), SearchIndexError>;
-
-    /// Update specific fields of an existing document.
-    ///
-    /// Only fields that are `Some` in the request will be updated. The document must
-    /// already exist in the index.
+    /// This function performs an upsert operation: if the document exists, only fields that are
+    /// `Some` in the request will be updated; if the document doesn't exist, it will be created
+    /// with the provided fields. Fields that are `None` in the request will be left unchanged
+    /// (for existing documents) or omitted (for new documents).
     ///
     /// # Arguments
     ///
@@ -44,9 +37,8 @@ pub trait SearchIndexProvider: Send + Sync {
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - If the document was updated successfully
-    /// * `Err(SearchIndexError::DocumentNotFound)` - If the document doesn't exist
-    /// * `Err(SearchIndexError)` - If the update fails
+    /// * `Ok(())` - If the document was updated or created successfully
+    /// * `Err(SearchIndexError)` - If the operation fails
     async fn update_document(&self, request: &UpdateEntityRequest) -> Result<(), SearchIndexError>;
 
     /// Delete a document from the search index.
@@ -62,24 +54,6 @@ pub trait SearchIndexProvider: Send + Sync {
     /// * `Ok(())` - If the document was deleted (or didn't exist)
     /// * `Err(SearchIndexError)` - If the deletion fails
     async fn delete_document(&self, request: &DeleteEntityRequest) -> Result<(), SearchIndexError>;
-
-    /// Index multiple documents in bulk and return a summary of successful and failed operations.
-    ///
-    /// This is more efficient than calling `index_document` multiple times. The function
-    /// returns a detailed summary including which documents succeeded and which failed.
-    ///
-    /// # Arguments
-    ///
-    /// * `documents` - Slice of entity documents to index
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(BatchOperationSummary)` - Contains aggregate statistics and individual results
-    /// * `Err(SearchIndexError)` - If the bulk operation fails entirely
-    async fn bulk_index_documents(
-        &self,
-        documents: &[EntityDocument],
-    ) -> Result<BatchOperationSummary, SearchIndexError>;
 
     /// Update multiple documents in bulk and return a summary of successful and failed operations.
     ///

@@ -17,5 +17,5 @@ pub use errors::SearchIndexError;
 pub use interfaces::SearchIndexProvider;
 pub use opensearch::OpenSearchClient;
 pub use types::{
-    BatchOperationResult, BatchOperationSummary, CreateEntityRequest, DeleteEntityRequest,
+    BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest,
 };

@@ -5,11 +5,8 @@
 
 use async_trait::async_trait;
 use opensearch::{
-    http::{
-        request::JsonBody,
-        transport::{SingleNodeConnectionPool, TransportBuilder},
-    },
-    BulkParts, DeleteParts, IndexParts, OpenSearch, UpdateParts,
+    http::transport::{SingleNodeConnectionPool, TransportBuilder},
+    DeleteParts, OpenSearch, UpdateParts,
 };
 use serde_json::{json, Value};
 use tracing::{debug, error, info, instrument};
@@ -22,7 +19,6 @@ use crate::opensearch::index_config::IndexConfig;
 use crate::types::{
     BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest,
 };
-use search_indexer_shared::EntityDocument;
 
 /// OpenSearch client implementation.
 ///
@@ -32,17 +28,19 @@ use search_indexer_shared::EntityDocument;
 ///
 /// ```ignore
 /// use search_indexer_repository::opensearch::IndexConfig;
+/// use search_indexer_repository::types::UpdateEntityRequest;
 /// let config = IndexConfig::new("entities", 0);
 /// let client = OpenSearchClient::new("http://localhost:9200", config).await?;
-/// client.ensure_index_exists().await?;
 ///
-/// let doc = EntityDocument::new(
-///     Uuid::new_v4(),
-///     Uuid::new_v4(),
-///     "Test Entity".to_string(),
-///     Some("Description".to_string()),
-/// );
-/// client.index_document(&doc).await?;
+/// let request = UpdateEntityRequest {
+///     entity_id: Uuid::new_v4().to_string(),
+///     space_id: Uuid::new_v4().to_string(),
+///     name: Some("Test Entity".to_string()),
+///     description: Some("Description".to_string()),
+///     ..Default::default()
+/// };
+/// // This will create the document if it doesn't exist, or update it if it does
+/// client.update_document(&request).await?;
 /// ```
 pub struct OpenSearchClient {
     client: OpenSearch,
@@ -96,60 +94,21 @@ impl OpenSearchClient {
 
 #[async_trait]
 impl SearchIndexProvider for OpenSearchClient {
-    /// Index a single document in the search index.
+    /// Update specific fields of a document, creating it if it doesn't exist (upsert).
     ///
-    /// This function indexes a document in OpenSearch. If a document with the same ID
-    /// already exists, it will be replaced.
-    ///
-    /// # Arguments
-    ///
-    /// * `document` - The entity document to index
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the document was indexed successfully
-    /// * `Err(SearchIndexError)` - If indexing fails
-    #[instrument(skip(self, document), fields(entity_id = %document.entity_id, space_id = %document.space_id))]
-    async fn index_document(&self, document: &EntityDocument) -> Result<(), SearchIndexError> {
-        let doc_id = Self::document_id(&document.entity_id, &document.space_id);
-
-        let response = self
-            .client
-            .index(IndexParts::IndexId(&self.index_config.alias, &doc_id))
-            .body(document)
-            .send()
-            .await
-            .map_err(|e| SearchIndexError::index(e.to_string()))?;
-
-        let status = response.status_code();
-        if !status.is_success() {
-            let error_body = response.text().await.unwrap_or_default();
-            error!(status = %status, body = %error_body, "Index request failed");
-            return Err(SearchIndexError::index(format!(
-                "Index failed with status {}: {}",
-                status, error_body
-            )));
-        }
-
-        debug!(doc_id = %doc_id, "Document indexed");
-        Ok(())
-    }
-
-    /// Update specific fields of an existing document.
-    ///
-    /// This function updates only the fields specified in the request. Fields that are
-    /// `None` in the request will be left unchanged in the index. The document must
-    /// already exist in the index.
+    /// This function performs an upsert operation: if the document exists, only fields that are
+    /// `Some` in the request will be updated; if the document doesn't exist, it will be created
+    /// with the provided fields. Fields that are `None` in the request will be left unchanged
+    /// (for existing documents) or omitted (for new documents).
     ///
     /// # Arguments
     ///
-    /// * `request` - The update request containing entity_id, space_id, and optional fields to update
+    /// * `request` - The update request containing entity_id, space_id, and optional fields
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - If the document was updated successfully
-    /// * `Err(SearchIndexError::DocumentNotFound)` - If the document doesn't exist
-    /// * `Err(SearchIndexError)` - If the update fails for other reasons
+    /// * `Ok(())` - If the document was updated or created successfully
+    /// * `Err(SearchIndexError)` - If the operation fails
     async fn update_document(&self, request: &UpdateEntityRequest) -> Result<(), SearchIndexError> {
         // Validate UUIDs
         let entity_id = Uuid::parse_str(&request.entity_id)
@@ -191,10 +150,15 @@ impl SearchIndexProvider for OpenSearchClient {
             return Ok(());
         }
 
+        // Use upsert to create document if it doesn't exist
+        // API reference: https://docs.opensearch.org/latest/api-reference/document-apis/update-document/#using-the-upsert-operation
         let response = self
             .client
             .update(UpdateParts::IndexId(&self.index_config.alias, &doc_id))
-            .body(json!({"doc": doc}))
+            .body(json!({
+                "doc": doc,
+                "doc_as_upsert": true
+            }))
             .send()
             .await
             .map_err(|e| SearchIndexError::update(e.to_string()))?;
@@ -202,15 +166,6 @@ impl SearchIndexProvider for OpenSearchClient {
         let status = response.status_code();
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_default();
-
-            // 404 means document doesn't exist
-            if status.as_u16() == 404 {
-                return Err(SearchIndexError::document_not_found(
-                    &request.entity_id,
-                    &request.space_id,
-                ));
-            }
-
             error!(status = %status, body = %error_body, "Update request failed");
             return Err(SearchIndexError::update(format!(
                 "Update failed with status {}: {}",
@@ -218,7 +173,7 @@ impl SearchIndexProvider for OpenSearchClient {
             )));
         }
 
-        debug!(doc_id = %doc_id, "Document updated");
+        debug!(doc_id = %doc_id, "Document updated/created");
         Ok(())
     }
 
@@ -264,131 +219,6 @@ impl SearchIndexProvider for OpenSearchClient {
 
         debug!(doc_id = %doc_id, "Document deleted");
         Ok(())
-    }
-
-    /// Index multiple documents in bulk and return a summary of successful and failed operations.
-    ///
-    /// This function indexes documents in bulk using OpenSearch's bulk API, which is more
-    /// efficient than calling `index_document` multiple times. The function returns a detailed
-    /// summary including which documents succeeded and which failed, along with error details
-    /// for failed operations.
-    ///
-    /// # Arguments
-    ///
-    /// * `documents` - Slice of entity documents to index
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(BatchOperationSummary)` - Contains total count, succeeded count, failed count,
-    ///   and individual results for each document with success status and optional error
-    /// * `Err(SearchIndexError)` - If the bulk operation fails entirely (e.g., connection error)
-    ///
-    /// # Note
-    ///
-    /// If the bulk request succeeds but some individual documents fail, the function still
-    /// returns `Ok` with a summary indicating which documents failed. Only complete bulk
-    /// operation failures (e.g., network errors) return `Err`.
-    async fn bulk_index_documents(
-        &self,
-        documents: &[EntityDocument],
-    ) -> Result<BatchOperationSummary, SearchIndexError> {
-        if documents.is_empty() {
-            return Ok(BatchOperationSummary {
-                total: 0,
-                succeeded: 0,
-                failed: 0,
-                results: Vec::new(),
-            });
-        }
-
-        let mut body: Vec<JsonBody<Value>> = Vec::with_capacity(documents.len() * 2);
-
-        for doc in documents {
-            let doc_id = Self::document_id(&doc.entity_id, &doc.space_id);
-            body.push(json!({"index": {"_id": doc_id}}).into());
-            body.push(
-                serde_json::to_value(doc)
-                    .map_err(|e| SearchIndexError::serialization(e.to_string()))?
-                    .into(),
-            );
-        }
-
-        let response = self
-            .client
-            .bulk(BulkParts::Index(&self.index_config.alias))
-            .body(body)
-            .send()
-            .await
-            .map_err(|e| SearchIndexError::index(e.to_string()))?;
-
-        let status = response.status_code();
-        if !status.is_success() {
-            let error_body = response.text().await.unwrap_or_default();
-            error!(status = %status, body = %error_body, "Bulk index request failed");
-            return Err(SearchIndexError::bulk_index(format!(
-                "Bulk index failed with status {}: {}",
-                status, error_body
-            )));
-        }
-
-        let response_body: Value = response
-            .json()
-            .await
-            .map_err(|e| SearchIndexError::parse(e.to_string()))?;
-
-        let mut results = Vec::new();
-        let mut succeeded = 0;
-        let mut failed = 0;
-
-        if let Some(items) = response_body["items"].as_array() {
-            for (idx, item) in items.iter().enumerate() {
-                if let Some(doc) = documents.get(idx) {
-                    if let Some(error) = item["index"]["error"].as_object() {
-                        failed += 1;
-                        let error_msg = error["reason"]
-                            .as_str()
-                            .unwrap_or("Unknown error")
-                            .to_string();
-                        results.push(BatchOperationResult {
-                            entity_id: doc.entity_id.to_string(),
-                            space_id: doc.space_id.to_string(),
-                            success: false,
-                            error: Some(SearchIndexError::index(error_msg)),
-                        });
-                    } else {
-                        succeeded += 1;
-                        results.push(BatchOperationResult {
-                            entity_id: doc.entity_id.to_string(),
-                            space_id: doc.space_id.to_string(),
-                            success: true,
-                            error: None,
-                        });
-                    }
-                }
-            }
-        } else {
-            // Fallback: assume all succeeded if we can't parse response
-            for doc in documents {
-                succeeded += 1;
-                results.push(BatchOperationResult {
-                    entity_id: doc.entity_id.to_string(),
-                    space_id: doc.space_id.to_string(),
-                    success: true,
-                    error: None,
-                });
-            }
-        }
-
-        debug!(
-            count = documents.len(),
-            succeeded, failed, "Bulk index completed"
-        );
-        Ok(BatchOperationSummary {
-            total: documents.len(),
-            succeeded,
-            failed,
-            results,
-        })
     }
 
     /// Update multiple documents in bulk and return a summary of successful and failed operations.
