@@ -8,8 +8,8 @@ use opensearch::{
     http::transport::{SingleNodeConnectionPool, TransportBuilder},
     DeleteParts, OpenSearch, UpdateParts,
 };
-use serde_json::{json, Value};
-use tracing::{debug, error, info, instrument};
+use serde_json::json;
+use tracing::{debug, error, info};
 use url::Url;
 use uuid::Uuid;
 
@@ -17,8 +17,10 @@ use crate::errors::SearchIndexError;
 use crate::interfaces::SearchIndexProvider;
 use crate::opensearch::index_config::IndexConfig;
 use crate::types::{
-    BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest,
+    BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UnsetEntityPropertiesRequest,
+    UpdateEntityRequest,
 };
+use crate::utils;
 
 /// OpenSearch client implementation.
 ///
@@ -90,6 +92,78 @@ impl OpenSearchClient {
     fn document_id(entity_id: &Uuid, space_id: &Uuid) -> String {
         format!("{}_{}", entity_id, space_id)
     }
+
+    /// Validate and sanitize property keys.
+    ///
+    /// Property keys must contain only alphanumeric characters and underscores.
+    ///
+    /// # Arguments
+    ///
+    /// * `property_keys` - Vector of property keys to validate
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If all property keys are valid
+    /// * `Err(SearchIndexError)` - If any property key is invalid
+    fn validate_property_keys(property_keys: &[String]) -> Result<(), SearchIndexError> {
+        if property_keys.is_empty() {
+            return Err(SearchIndexError::validation(
+                "At least one property key must be provided".to_string(),
+            ));
+        }
+
+        for key in property_keys {
+            if key.is_empty() {
+                return Err(SearchIndexError::validation(
+                    "Property keys cannot be empty".to_string(),
+                ));
+            }
+
+            if !key.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                return Err(SearchIndexError::validation(format!(
+                    "Property key '{}' contains invalid characters. Only alphanumeric characters and underscores are allowed",
+                    key
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Create a Painless script to safely remove multiple fields from a document.
+    ///
+    /// The script checks if each field exists before removing it to prevent errors.
+    /// This function validates property keys before generating the script to ensure
+    /// no invalid scripts can be created.
+    ///
+    /// # Arguments
+    ///
+    /// * `property_keys` - Vector of property keys to remove
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(String)` - A Painless script source string that removes the specified fields
+    /// * `Err(SearchIndexError)` - If property keys are invalid
+    fn create_unset_properties_script(
+        property_keys: &[String],
+    ) -> Result<String, SearchIndexError> {
+        // Validate property keys before generating script
+        Self::validate_property_keys(property_keys)?;
+
+        Ok(property_keys
+            .iter()
+            .map(|key| {
+                // Escape the key for use in Painless script
+                // Since we've validated the key contains only alphanumeric and underscore,
+                // we don't need complex escaping, but we'll still quote it properly
+                format!(
+                    "if (ctx._source.containsKey(\"{}\")) {{ ctx._source.remove(\"{}\") }}",
+                    key, key
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; "))
+    }
 }
 
 #[async_trait]
@@ -111,10 +185,8 @@ impl SearchIndexProvider for OpenSearchClient {
     /// * `Err(SearchIndexError)` - If the operation fails
     async fn update_document(&self, request: &UpdateEntityRequest) -> Result<(), SearchIndexError> {
         // Validate UUIDs
-        let entity_id = Uuid::parse_str(&request.entity_id)
-            .map_err(|e| SearchIndexError::validation(format!("Invalid entity_id: {}", e)))?;
-        let space_id = Uuid::parse_str(&request.space_id)
-            .map_err(|e| SearchIndexError::validation(format!("Invalid space_id: {}", e)))?;
+        let (entity_id, space_id) =
+            utils::parse_entity_and_space_ids(&request.entity_id, &request.space_id)?;
 
         let doc_id = Self::document_id(&entity_id, &space_id);
 
@@ -191,10 +263,8 @@ impl SearchIndexProvider for OpenSearchClient {
     /// * `Ok(())` - If the document was deleted (or didn't exist)
     /// * `Err(SearchIndexError)` - If the deletion fails
     async fn delete_document(&self, request: &DeleteEntityRequest) -> Result<(), SearchIndexError> {
-        let entity_id = Uuid::parse_str(&request.entity_id)
-            .map_err(|e| SearchIndexError::validation(format!("Invalid entity_id: {}", e)))?;
-        let space_id = Uuid::parse_str(&request.space_id)
-            .map_err(|e| SearchIndexError::validation(format!("Invalid space_id: {}", e)))?;
+        let (entity_id, space_id) =
+            utils::parse_entity_and_space_ids(&request.entity_id, &request.space_id)?;
 
         let doc_id = Self::document_id(&entity_id, &space_id);
 
@@ -341,6 +411,66 @@ impl SearchIndexProvider for OpenSearchClient {
             results,
         })
     }
+
+    /// Unset (remove) specific properties from a document.
+    ///
+    /// This function removes the specified property keys from a document using a Painless script.
+    /// If a property doesn't exist, it is safely ignored. The document must exist (this is not an upsert).
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The unset request containing entity_id, space_id, and property keys to remove
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If the properties were removed successfully
+    /// * `Err(SearchIndexError)` - If the operation fails
+    async fn unset_document_properties(
+        &self,
+        request: &UnsetEntityPropertiesRequest,
+    ) -> Result<(), SearchIndexError> {
+        // Validate UUIDs
+        let (entity_id, space_id) =
+            utils::parse_entity_and_space_ids(&request.entity_id, &request.space_id)?;
+
+        let doc_id = Self::document_id(&entity_id, &space_id);
+
+        // Build Painless script to safely remove multiple fields
+        // Validation and sanitization of property_keys happens
+        //  inside create_unset_properties_script
+        let script_source = Self::create_unset_properties_script(&request.property_keys)?;
+
+        // Use update API with script to remove fields
+        let response = self
+            .client
+            .update(UpdateParts::IndexId(&self.index_config.alias, &doc_id))
+            .body(json!({
+                "script": {
+                    "source": script_source,
+                    "lang": "painless"
+                }
+            }))
+            .send()
+            .await
+            .map_err(|e| SearchIndexError::update(e.to_string()))?;
+
+        let status = response.status_code();
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_default();
+            error!(status = %status, body = %error_body, "Unset properties request failed");
+            return Err(SearchIndexError::update(format!(
+                "Unset properties failed with status {}: {}",
+                status, error_body
+            )));
+        }
+
+        debug!(
+            doc_id = %doc_id,
+            property_keys = ?request.property_keys,
+            "Document properties unset"
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -361,68 +491,173 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_hit() {
-        let hit = json!({
-            "_source": {
-                "entity_id": "550e8400-e29b-41d4-a716-446655440000",
-                "space_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-                "name": "Test Entity",
-                "description": "A test description"
-            },
-            "_score": 1.5
-        });
-
-        let result = OpenSearchClient::parse_hit(&hit).unwrap();
-
-        assert_eq!(result.name, Some("Test Entity".to_string()));
-        assert_eq!(result.description, Some("A test description".to_string()));
-        assert_eq!(result.relevance_score, 1.5);
+    fn test_validate_property_keys_valid() {
+        let keys = vec![
+            "name".to_string(),
+            "description".to_string(),
+            "entity_global_score".to_string(),
+            "test123".to_string(),
+            "a".to_string(),
+            "A".to_string(),
+            "a1".to_string(),
+            "_private".to_string(),
+        ];
+        assert!(OpenSearchClient::validate_property_keys(&keys).is_ok());
     }
 
     #[test]
-    fn test_parse_hit_minimal() {
-        let hit = json!({
-            "_source": {
-                "entity_id": "550e8400-e29b-41d4-a716-446655440000",
-                "space_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-                "name": "Minimal"
-            },
-            "_score": 0.5
-        });
-
-        let result = OpenSearchClient::parse_hit(&hit).unwrap();
-
-        assert_eq!(result.name, Some("Minimal".to_string()));
-        assert!(result.description.is_none());
-        assert!(result.avatar.is_none());
+    fn test_validate_property_keys_empty_vec() {
+        let keys = vec![];
+        let result = OpenSearchClient::validate_property_keys(&keys);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            SearchIndexError::ValidationError(_)
+        ));
     }
 
     #[test]
-    fn test_parse_hit_no_name() {
-        let hit = json!({
-            "_source": {
-                "entity_id": "550e8400-e29b-41d4-a716-446655440000",
-                "space_id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-            },
-            "_score": 0.5
-        });
-
-        let result = OpenSearchClient::parse_hit(&hit).unwrap();
-
-        assert!(result.name.is_none());
-        assert!(result.description.is_none());
+    fn test_validate_property_keys_empty_string() {
+        let keys = vec!["".to_string()];
+        let result = OpenSearchClient::validate_property_keys(&keys);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            SearchIndexError::ValidationError(_)
+        ));
     }
 
     #[test]
-    fn test_parse_hit_invalid() {
-        let hit = json!({
-            "_source": {
-                "name": "Missing IDs"
-            },
-            "_score": 1.0
-        });
+    fn test_validate_property_keys_invalid_characters() {
+        let test_cases = vec![
+            ("name-with-dash", "contains dash"),
+            ("name.with.dot", "contains dot"),
+            ("name with space", "contains space"),
+            ("name@symbol", "contains @"),
+            ("name#hash", "contains #"),
+            ("name$dollar", "contains $"),
+            ("name%percent", "contains %"),
+            ("name&and", "contains &"),
+            ("name*star", "contains *"),
+            ("name+plus", "contains +"),
+            ("name=equals", "contains ="),
+            ("name[ bracket", "contains ["),
+            ("name] bracket", "contains ]"),
+            ("name{ brace", "contains {"),
+            ("name} brace", "contains }"),
+            ("name|pipe", "contains |"),
+            ("name\\backslash", "contains backslash"),
+            ("name/forward", "contains forward slash"),
+            ("name?question", "contains ?"),
+            ("name:colon", "contains :"),
+            ("name;semicolon", "contains ;"),
+            ("name\"quote", "contains quote"),
+            ("name'apostrophe", "contains apostrophe"),
+            ("name<less", "contains <"),
+            ("name>greater", "contains >"),
+            ("name,comma", "contains comma"),
+        ];
 
-        let result = OpenSearchClient::parse_hit(&hit);
-        assert!(result.is_none());
+        for (key, description) in test_cases {
+            let keys = vec![key.to_string()];
+            let result = OpenSearchClient::validate_property_keys(&keys);
+            assert!(
+                result.is_err(),
+                "Expected error for key '{}' ({})",
+                key,
+                description
+            );
+            assert!(
+                matches!(result.unwrap_err(), SearchIndexError::ValidationError(_)),
+                "Expected ValidationError for key '{}'",
+                key
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_property_keys_mixed_valid_invalid() {
+        let keys = vec![
+            "name".to_string(),
+            "description".to_string(),
+            "invalid-key".to_string(), // Invalid
+        ];
+        let result = OpenSearchClient::validate_property_keys(&keys);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_unset_properties_script_single_key() {
+        let keys = vec!["name".to_string()];
+        let script = OpenSearchClient::create_unset_properties_script(&keys).unwrap();
+        assert_eq!(
+            script,
+            "if (ctx._source.containsKey(\"name\")) { ctx._source.remove(\"name\") }"
+        );
+    }
+
+    #[test]
+    fn test_create_unset_properties_script_multiple_keys() {
+        let keys = vec![
+            "name".to_string(),
+            "description".to_string(),
+            "avatar".to_string(),
+        ];
+        let script = OpenSearchClient::create_unset_properties_script(&keys).unwrap();
+        assert!(script.contains("name"));
+        assert!(script.contains("description"));
+        assert!(script.contains("avatar"));
+        assert!(script.contains("containsKey"));
+        assert!(script.contains("remove"));
+        // Should have semicolons separating the statements
+        assert_eq!(script.matches(';').count(), 2);
+    }
+
+    #[test]
+    fn test_create_unset_properties_script_multiple_keys_exact_format() {
+        let keys = vec![
+            "name".to_string(),
+            "description".to_string(),
+            "avatar".to_string(),
+            "cover".to_string(),
+            "entity_global_score".to_string(),
+        ];
+        let script = OpenSearchClient::create_unset_properties_script(&keys).unwrap();
+
+        // Verify exact script format
+        let expected_script = "if (ctx._source.containsKey(\"name\")) { ctx._source.remove(\"name\") }; if (ctx._source.containsKey(\"description\")) { ctx._source.remove(\"description\") }; if (ctx._source.containsKey(\"avatar\")) { ctx._source.remove(\"avatar\") }; if (ctx._source.containsKey(\"cover\")) { ctx._source.remove(\"cover\") }; if (ctx._source.containsKey(\"entity_global_score\")) { ctx._source.remove(\"entity_global_score\") }";
+        assert_eq!(script, expected_script);
+    }
+
+    #[test]
+    fn test_create_unset_properties_script_with_underscore() {
+        let keys = vec!["entity_global_score".to_string()];
+        let script = OpenSearchClient::create_unset_properties_script(&keys).unwrap();
+        assert_eq!(
+            script,
+            "if (ctx._source.containsKey(\"entity_global_score\")) { ctx._source.remove(\"entity_global_score\") }"
+        );
+    }
+
+    #[test]
+    fn test_create_unset_properties_script_empty() {
+        let keys = vec![];
+        let result = OpenSearchClient::create_unset_properties_script(&keys);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            SearchIndexError::ValidationError(_)
+        ));
+    }
+
+    #[test]
+    fn test_create_unset_properties_script_invalid_key() {
+        let keys = vec!["invalid-key".to_string()];
+        let result = OpenSearchClient::create_unset_properties_script(&keys);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            SearchIndexError::ValidationError(_)
+        ));
     }
 }

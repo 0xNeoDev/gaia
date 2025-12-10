@@ -6,7 +6,9 @@
 use async_trait::async_trait;
 
 use crate::errors::SearchIndexError;
-use crate::types::{BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest};
+use crate::types::{
+    BatchOperationSummary, DeleteEntityRequest, UnsetEntityPropertiesRequest, UpdateEntityRequest,
+};
 
 /// Abstracts the underlying search index implementation (OpenSearch, Elasticsearch, etc.).
 ///
@@ -90,4 +92,22 @@ pub trait SearchIndexProvider: Send + Sync {
         &self,
         requests: &[DeleteEntityRequest],
     ) -> Result<BatchOperationSummary, SearchIndexError>;
+
+    /// Unset (remove) specific properties from a document.
+    ///
+    /// This function removes the specified property keys from a document. If a property
+    /// doesn't exist, it is safely ignored. The document must exist (this is not an upsert).
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The unset request containing entity_id, space_id, and property keys to remove
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If the properties were removed successfully
+    /// * `Err(SearchIndexError)` - If the operation fails
+    async fn unset_document_properties(
+        &self,
+        request: &UnsetEntityPropertiesRequest,
+    ) -> Result<(), SearchIndexError>;
 }

@@ -41,6 +41,21 @@ pub struct DeleteEntityRequest {
     pub space_id: String,
 }
 
+/// Request to unset (remove) specific properties from an entity document.
+///
+/// This struct allows removing specific fields from a document. The `entity_id` and
+/// `space_id` are required to identify the document. The `property_keys` vector
+/// contains the names of the fields to remove (e.g., "name", "description", "avatar", "cover").
+#[derive(Debug, Clone)]
+pub struct UnsetEntityPropertiesRequest {
+    /// The entity's unique identifier.
+    pub entity_id: String,
+    /// The space this entity belongs to.
+    pub space_id: String,
+    /// The property keys to remove from the document.
+    pub property_keys: Vec<String>,
+}
+
 /// Result of a batch operation for a single item.
 ///
 /// This struct represents the outcome of a single operation within a batch (e.g.,

@@ -12,7 +12,9 @@
 use crate::config::SearchIndexConfig;
 use crate::errors::SearchIndexError;
 use crate::interfaces::SearchIndexProvider;
-use crate::types::{BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest};
+use crate::types::{
+    BatchOperationSummary, DeleteEntityRequest, UnsetEntityPropertiesRequest, UpdateEntityRequest,
+};
 use uuid::Uuid;
 
 /// The main client for interacting with the search index.
@@ -167,6 +169,60 @@ impl SearchIndexClient {
         Self::validate_uuid("space_id", &request.space_id)?;
 
         self.provider.delete_document(&request).await
+    }
+
+    /// Unset (remove) specific properties from an entity document.
+    ///
+    /// This function removes the specified property keys from a document. If a property
+    /// doesn't exist, it is safely ignored. The document must exist (this is not an upsert).
+    /// Common property keys include: "name", "description", "avatar", "cover", "entity_global_score",
+    /// "space_score", "entity_space_score".
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - UnsetEntityPropertiesRequest containing entity_id, space_id, and property keys to remove
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If the properties were removed successfully
+    /// * `Err(SearchIndexError::ValidationError)` - If UUIDs are invalid or no property keys provided
+    /// * `Err(SearchIndexError)` - If the operation fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use search_indexer_repository::{SearchIndexClient, SearchIndexProvider};
+    /// use search_indexer_repository::types::UnsetEntityPropertiesRequest;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let provider = Box::new(search_indexer_repository::opensearch::OpenSearchClient::new("http://localhost:9200", search_indexer_repository::opensearch::IndexConfig::new("entities", 0)).await?);
+    /// # let client = SearchIndexClient::new(provider);
+    /// let request = UnsetEntityPropertiesRequest {
+    ///     entity_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+    ///     space_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8".to_string(),
+    ///     property_keys: vec!["description".to_string(), "avatar".to_string()],
+    /// };
+    ///
+    /// client.unset_properties(request).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn unset_properties(
+        &self,
+        request: UnsetEntityPropertiesRequest,
+    ) -> Result<(), SearchIndexError> {
+        // Validate required fields and UUID format
+        Self::validate_uuid("entity_id", &request.entity_id)?;
+        Self::validate_uuid("space_id", &request.space_id)?;
+
+        // Validate that at least one property key is provided
+        if request.property_keys.is_empty() {
+            return Err(SearchIndexError::validation(
+                "At least one property key must be provided".to_string(),
+            ));
+        }
+
+        self.provider.unset_document_properties(&request).await
     }
 
     /// Update multiple entity documents in bulk and return a summary of successful and failed operations.
@@ -376,6 +432,17 @@ mod tests {
                 failed,
                 results,
             })
+        }
+
+        async fn unset_document_properties(
+            &self,
+            _request: &UnsetEntityPropertiesRequest,
+        ) -> Result<(), SearchIndexError> {
+            if self.should_fail {
+                return Err(SearchIndexError::index("Mock failure"));
+            }
+            // Mock implementation - just succeed without tracking
+            Ok(())
         }
     }
 

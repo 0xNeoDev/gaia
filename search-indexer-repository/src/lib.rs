@@ -10,6 +10,7 @@ pub mod errors;
 pub mod interfaces;
 pub mod opensearch;
 pub mod types;
+pub mod utils;
 
 pub use client::SearchIndexClient;
 pub use config::SearchIndexConfig;
@@ -17,5 +18,7 @@ pub use errors::SearchIndexError;
 pub use interfaces::SearchIndexProvider;
 pub use opensearch::OpenSearchClient;
 pub use types::{
-    BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UpdateEntityRequest,
+    BatchOperationResult, BatchOperationSummary, DeleteEntityRequest, UnsetEntityPropertiesRequest,
+    UpdateEntityRequest,
 };
+pub use utils::parse_entity_and_space_ids;
