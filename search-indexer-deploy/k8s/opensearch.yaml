@@ -66,7 +66,7 @@ spec:
           command: ["sh", "-c", "sysctl -w vm.max_map_count=262144 || true"]
           securityContext:
             privileged: true
-
+        
       # -----------------------------------------------------------------------
       # Main Container
       # -----------------------------------------------------------------------
@@ -117,14 +117,14 @@ spec:
             httpGet:
               path: /_cluster/health
               port: 9200
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /_cluster/health
               port: 9200
-            initialDelaySeconds: 60
+            initialDelaySeconds: 90
             periodSeconds: 30
             timeoutSeconds: 10
 

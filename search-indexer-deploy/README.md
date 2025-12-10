@@ -34,6 +34,18 @@ Production runs on Kubernetes and is deployed via GitHub Actions.
 
 The Kubernetes manifests are in `k8s/`.
 
+### Prerequisites
+
+Before deploying, you must create the Grafana credentials secret:
+
+```bash
+# Create the secret with your desired credentials
+kubectl create secret generic grafana-credentials \
+  --from-literal=admin-user=<your-username> \
+  --from-literal=admin-password=<your-secure-password> \
+  --namespace=search
+```
+
 ### Manual Deployment
 
 ```bash
@@ -43,6 +55,23 @@ kubectl apply -k search-indexer-deploy/k8s/
 # Or using kustomize directly
 kustomize build search-indexer-deploy/k8s/ | kubectl apply -f -
 ```
+
+### Accessing Grafana
+
+Grafana is exposed publicly via NodePort on port `30440`. Access it at:
+
+```
+http://<node-ip>:30440
+```
+
+To find your node IP:
+```bash
+kubectl get nodes -o wide
+```
+
+**Note**: Grafana is accessible over HTTP (not HTTPS). For production use, consider adding TLS/HTTPS or restricting access via firewall rules.
+
+The credentials are set via the `grafana-credentials` secret created in the prerequisites step above.
 
 ## Directory Structure
 
@@ -76,7 +105,7 @@ search-indexer-deploy/
 | OpenSearch REST API | 9200 | Search and indexing API |
 | OpenSearch Transport | 9300 | Inter-node communication |
 | OpenSearch Dashboards | 5601 | Web UI for OpenSearch queries |
-| Grafana | 4040 | Metrics dashboards (admin/admin) |
+| Grafana | 4040 (NodePort: 30440) | Metrics dashboards (HTTP, publicly accessible) |
 | Prometheus | 9090 | Metrics collection and querying |
 | OpenSearch Exporter | 9114 | Prometheus metrics exporter |
 
@@ -116,4 +145,14 @@ For production, you should:
 1. Enable the OpenSearch security plugin
 2. Configure TLS certificates
 3. Set up authentication
-4. Use Kubernetes secrets for credentials
+4. Use Kubernetes secrets for credentials (✅ Grafana credentials are already using secrets)
+
+### Grafana Security
+
+- Grafana is **publicly exposed** via NodePort on port `30440` over **HTTP** (not HTTPS)
+- Credentials are stored in Kubernetes secrets (see Prerequisites section)
+- Ensure you use strong credentials when creating the `grafana-credentials` secret
+- **Warning**: Traffic is unencrypted. For production, consider:
+  - Adding TLS/HTTPS (via Ingress + cert-manager or Load Balancer)
+  - Restricting access via firewall rules or network policies
+  - Using OAuth/SSO authentication with Google or GitHub

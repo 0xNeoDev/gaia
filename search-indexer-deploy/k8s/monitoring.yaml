@@ -73,6 +73,9 @@ data:
 
 # Grafana dashboard JSON is loaded from opensearch-overview-dashboard.json
 # via configMapGenerator in kustomization.yaml
+#
+# NOTE: The grafana-credentials secret must be created before deploying.
+# See README.md for instructions.
 
 # =============================================================================
 # OpenSearch Exporter
@@ -256,9 +259,15 @@ spec:
             - name: GF_SERVER_HTTP_PORT
               value: "4040"
             - name: GF_SECURITY_ADMIN_USER
-              value: "admin"
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: admin-user
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: "admin"
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-credentials
+                  key: admin-password
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
           volumeMounts:
@@ -319,11 +328,13 @@ metadata:
   labels:
     app: grafana
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 4040
       targetPort: 4040
+      nodePort: 30440  # Accessible at http://<node-ip>:30440
+      protocol: TCP
   selector:
     app: grafana
 
